@@ -1,14 +1,14 @@
+import { v4 as generateUUID } from 'uuid';
 import {
   generateUser,
   generateChallenge,
   createAndPopulateGroup,
   translate as t,
 } from '../../../../helpers/api-integration/v3';
-import { v4 as generateUUID } from 'uuid';
 
 describe('POST /challenges/:challengeId/join', () => {
   it('returns error when challengeId is not a valid UUID', async () => {
-    let user = await generateUser({ balance: 1});
+    const user = await generateUser({ balance: 1 });
 
     await expect(user.post('/challenges/test/join')).to.eventually.be.rejected.and.eql({
       code: 400,
@@ -18,7 +18,7 @@ describe('POST /challenges/:challengeId/join', () => {
   });
 
   it('returns error when challengeId is not for a valid challenge', async () => {
-    let user = await generateUser({ balance: 1});
+    const user = await generateUser({ balance: 1 });
 
     await expect(user.post(`/challenges/${generateUUID()}/join`)).to.eventually.be.rejected.and.eql({
       code: 404,
@@ -34,20 +34,20 @@ describe('POST /challenges/:challengeId/join', () => {
     let authorizedUser;
 
     beforeEach(async () => {
-      let populatedGroup = await createAndPopulateGroup({
+      const populatedGroup = await createAndPopulateGroup({
         members: 1,
       });
 
       groupLeader = populatedGroup.groupLeader;
       group = populatedGroup.group;
-      authorizedUser = populatedGroup.members[0];
+      authorizedUser = populatedGroup.members[0]; // eslint-disable-line prefer-destructuring
 
       challenge = await generateChallenge(groupLeader, group);
       await groupLeader.post(`/challenges/${challenge._id}/join`);
     });
 
-    it('returns an error when user doesn\'t have permissions to access the challenge', async () => {
-      let unauthorizedUser = await generateUser();
+    it('returns an error when user isn\'t in the private group and isn\'t challenge leader', async () => {
+      const unauthorizedUser = await generateUser();
 
       await expect(unauthorizedUser.post(`/challenges/${challenge._id}/join`)).to.eventually.be.rejected.and.eql({
         code: 404,
@@ -56,8 +56,18 @@ describe('POST /challenges/:challengeId/join', () => {
       });
     });
 
+    it('succeeds when user isn\'t in the private group but is challenge leader', async () => {
+      await groupLeader.post(`/challenges/${challenge._id}/leave`);
+      await groupLeader.post(`/groups/${group._id}/leave`);
+      await groupLeader.sync();
+      expect(groupLeader.guilds).to.be.empty; // check that leaving worked
+
+      const res = await groupLeader.post(`/challenges/${challenge._id}/join`);
+      expect(res.name).to.equal(challenge.name);
+    });
+
     it('returns challenge data', async () => {
-      let res = await authorizedUser.post(`/challenges/${challenge._id}/join`);
+      const res = await authorizedUser.post(`/challenges/${challenge._id}/join`);
 
       expect(res.group).to.eql({
         _id: group._id,
@@ -68,7 +78,15 @@ describe('POST /challenges/:challengeId/join', () => {
       expect(res.leader).to.eql({
         _id: groupLeader._id,
         id: groupLeader._id,
-        profile: {name: groupLeader.profile.name},
+        profile: { name: groupLeader.profile.name },
+        auth: {
+          local: {
+            username: groupLeader.auth.local.username,
+          },
+        },
+        flags: {
+          verifiedUsername: true,
+        },
       });
       expect(res.name).to.equal(challenge.name);
     });
@@ -93,7 +111,7 @@ describe('POST /challenges/:challengeId/join', () => {
 
     it('increases memberCount of challenge', async () => {
       await challenge.sync();
-      let oldMemberCount = challenge.memberCount;
+      const oldMemberCount = challenge.memberCount;
 
       await authorizedUser.post(`/challenges/${challenge._id}/join`);
 
@@ -105,15 +123,13 @@ describe('POST /challenges/:challengeId/join', () => {
     it('syncs challenge tasks to joining user', async () => {
       const taskText = 'A challenge task text';
       await groupLeader.post(`/tasks/challenge/${challenge._id}`, [
-        {type: 'daily', text: taskText},
+        { type: 'daily', text: taskText },
       ]);
 
       await authorizedUser.post(`/challenges/${challenge._id}/join`);
 
       const tasks = await authorizedUser.get('/tasks/user');
-      const syncedTask = tasks.find((task) => {
-        return task.text === taskText;
-      });
+      const syncedTask = tasks.find(task => task.text === taskText);
 
       expect(syncedTask.text).to.eql(taskText);
       expect(syncedTask.isDue).to.exist;
@@ -121,7 +137,7 @@ describe('POST /challenges/:challengeId/join', () => {
     });
 
     it('adds challenge tag to user tags', async () => {
-      let userTagsLength = (await authorizedUser.get('/tags')).length;
+      const userTagsLength = (await authorizedUser.get('/tags')).length;
 
       await authorizedUser.post(`/challenges/${challenge._id}/join`);
 

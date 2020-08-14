@@ -1,13 +1,14 @@
+import { each, find } from 'lodash';
 import { model as Challenge } from '../../../../website/server/models/challenge';
 import { model as Group } from '../../../../website/server/models/group';
 import { model as User } from '../../../../website/server/models/user';
 import * as Tasks from '../../../../website/server/models/task';
-import common from '../../../../website/common/';
-import { each, find } from 'lodash';
+import common from '../../../../website/common';
 
 describe('Challenge Model', () => {
-  let guild, leader, challenge, task;
-  let tasksToTest = {
+  let guild; let leader; let challenge; let
+    task;
+  const tasksToTest = {
     habit: {
       text: 'test habit',
       type: 'habit',
@@ -30,6 +31,33 @@ describe('Challenge Model', () => {
     },
     reward: {
       text: 'test reward',
+      type: 'reward',
+      notes: 'test notes',
+    },
+  };
+  const tasks2ToTest = {
+    habit: {
+      text: 'test habit 2',
+      type: 'habit',
+      up: false,
+      down: true,
+      notes: 'test notes',
+    },
+    todo: {
+      text: 'test todo 2',
+      type: 'todo',
+      notes: 'test notes',
+    },
+    daily: {
+      text: 'test daily 2',
+      type: 'daily',
+      frequency: 'daily',
+      everyX: 5,
+      startDate: new Date(),
+      notes: 'test notes',
+    },
+    reward: {
+      text: 'test reward 2',
       type: 'reward',
       notes: 'test notes',
     },
@@ -74,67 +102,160 @@ describe('Challenge Model', () => {
       it('adds tasks to challenge and challenge members', async () => {
         await challenge.addTasks([task]);
 
-        const updatedLeader = await User.findOne({_id: leader._id});
-        const updatedLeadersTasks = await Tasks.Task.find({_id: { $in: updatedLeader.tasksOrder[`${taskType}s`]}});
-        const syncedTask = find(updatedLeadersTasks, function findNewTask (updatedLeadersTask) {
-          return updatedLeadersTask.type === taskValue.type && updatedLeadersTask.text === taskValue.text;
-        });
+        const updatedLeader = await User.findOne({ _id: leader._id });
+        const updatedLeadersTasks = await Tasks.Task.find({ _id: { $in: updatedLeader.tasksOrder[`${taskType}s`] } });
+        const syncedTask = find(
+          updatedLeadersTasks,
+          updatedLeadersTask => (
+            updatedLeadersTask.type === taskValue.type
+            && updatedLeadersTask.text === taskValue.text
+          ),
+        );
 
         expect(syncedTask).to.exist;
         expect(syncedTask.notes).to.eql(task.notes);
         expect(syncedTask.tags[0]).to.eql(challenge._id);
       });
 
-      it('syncs a challenge to a user', async () => {
-        await challenge.addTasks([task]);
-
-        let newMember = new User({
+      it('adds a challenge to a user', async () => {
+        const newMember = new User({
           guilds: [guild._id],
         });
         await newMember.save();
 
-        await challenge.syncToUser(newMember);
+        const addedSuccessfully = await challenge.addToUser(newMember);
 
-        let updatedNewMember = await User.findById(newMember._id);
-        let updatedNewMemberTasks = await Tasks.Task.find({_id: { $in: updatedNewMember.tasksOrder[`${taskType}s`]}});
-        let syncedTask = find(updatedNewMemberTasks, function findNewTask (updatedNewMemberTask) {
-          return updatedNewMemberTask.type === taskValue.type && updatedNewMemberTask.text === taskValue.text;
-        });
+        const updatedNewMember = await User.findById(newMember._id);
 
+        expect(addedSuccessfully).to.eql(true);
         expect(updatedNewMember.challenges).to.contain(challenge._id);
+      });
+
+      it('does not add a challenge to a user that already in the challenge', async () => {
+        const newMember = new User({
+          guilds: [guild._id],
+          challenges: [challenge._id],
+        });
+        await newMember.save();
+
+        const addedSuccessfully = await challenge.addToUser(newMember);
+
+        const updatedNewMember = await User.findById(newMember._id);
+
+        expect(addedSuccessfully).to.eql(false);
+        expect(updatedNewMember.challenges).to.contain(challenge._id);
+        expect(updatedNewMember.challenges.length).to.eql(1);
+      });
+
+      it('syncs challenge tasks to a user', async () => {
+        await challenge.addTasks([task]);
+
+        const newMember = new User({
+          guilds: [guild._id],
+        });
+        await newMember.save();
+
+        await challenge.syncTasksToUser(newMember);
+
+        const updatedNewMember = await User.findById(newMember._id);
+        const updatedNewMemberTasks = await Tasks.Task.find({ _id: { $in: updatedNewMember.tasksOrder[`${taskType}s`] } });
+        const syncedTask = find(
+          updatedNewMemberTasks,
+          updatedNewMemberTask => (
+            updatedNewMemberTask.type === taskValue.type
+            && updatedNewMemberTask.text === taskValue.text
+          ),
+        );
+
         expect(updatedNewMember.tags[7].id).to.equal(challenge._id);
         expect(updatedNewMember.tags[7].name).to.equal(challenge.shortName);
         expect(syncedTask).to.exist;
         expect(syncedTask.attribute).to.eql('str');
       });
 
-      it('syncs a challenge to a user with the existing task', async () => {
+      it('should add challenge tag back to user upon syncing challenge tasks to a user with challenge tag removed', async () => {
         await challenge.addTasks([task]);
 
-        let updatedLeader = await User.findOne({_id: leader._id});
-        let updatedLeadersTasks = await Tasks.Task.find({_id: { $in: updatedLeader.tasksOrder[`${taskType}s`]}});
-        let syncedTask = find(updatedLeadersTasks, function findNewTask (updatedLeadersTask) {
-          return updatedLeadersTask.challenge.taskId === task._id;
+        const newMember = new User({
+          guilds: [guild._id],
         });
+        await newMember.save();
+        await challenge.syncTasksToUser(newMember);
 
-        let createdAtBefore = syncedTask.createdAt;
-        let attributeBefore = syncedTask.attribute;
+        let updatedNewMember = await User.findById(newMember._id).exec();
+        const updatedNewMemberId = updatedNewMember._id;
 
-        let newTitle = 'newName';
+        updatedNewMember.tags = [];
+        await updatedNewMember.save();
+
+        const taskValue2 = tasks2ToTest[taskType];
+        const task2 = new Tasks[`${taskType}`](Tasks.Task.sanitize(taskValue2));
+        task2.challenge.id = challenge._id;
+        await challenge.addTasks([task2]);
+        await challenge.syncTasksToUser(updatedNewMember);
+
+        updatedNewMember = await User.findById(updatedNewMemberId).exec();
+
+        expect(updatedNewMember.tags.length).to.equal(1);
+        expect(updatedNewMember.tags[0].id).to.equal(challenge._id);
+        expect(updatedNewMember.tags[0].name).to.equal(challenge.shortName);
+      });
+
+      it('should not add a duplicate challenge tag to user upon syncing challenge tasks to a user with existing challenge tag', async () => {
+        await challenge.addTasks([task]);
+
+        const newMember = new User({
+          guilds: [guild._id],
+        });
+        await newMember.save();
+        await challenge.syncTasksToUser(newMember);
+
+        let updatedNewMember = await User.findById(newMember._id).exec();
+        const updatedNewMemberId = updatedNewMember._id;
+
+        const taskValue2 = tasks2ToTest[taskType];
+        const task2 = new Tasks[`${taskType}`](Tasks.Task.sanitize(taskValue2));
+        task2.challenge.id = challenge._id;
+        await challenge.addTasks([task2]);
+        await challenge.syncTasksToUser(updatedNewMember);
+
+        updatedNewMember = await User.findById(updatedNewMemberId);
+
+        expect(updatedNewMember.tags.length).to.equal(8);
+        expect(updatedNewMember.tags[7].id).to.equal(challenge._id);
+        expect(updatedNewMember.tags[7].name).to.equal(challenge.shortName);
+        expect(updatedNewMember.tags.filter(tag => tag.id === challenge._id).length).to.equal(1);
+      });
+
+      it('syncs challenge tasks to a user with the existing task', async () => {
+        await challenge.addTasks([task]);
+
+        let updatedLeader = await User.findOne({ _id: leader._id });
+        let updatedLeadersTasks = await Tasks.Task.find({ _id: { $in: updatedLeader.tasksOrder[`${taskType}s`] } });
+        let syncedTask = find(
+          updatedLeadersTasks,
+          updatedLeadersTask => updatedLeadersTask.challenge.taskId === task._id,
+        );
+
+        const createdAtBefore = syncedTask.createdAt;
+        const attributeBefore = syncedTask.attribute;
+
+        const newTitle = 'newName';
         task.text = newTitle;
         task.attribute = 'int';
         await task.save();
-        await challenge.syncToUser(leader);
+        await challenge.syncTasksToUser(leader);
 
-        updatedLeader = await User.findOne({_id: leader._id});
-        updatedLeadersTasks = await Tasks.Task.find({_id: { $in: updatedLeader.tasksOrder[`${taskType}s`]}});
+        updatedLeader = await User.findOne({ _id: leader._id });
+        updatedLeadersTasks = await Tasks.Task.find({ _id: { $in: updatedLeader.tasksOrder[`${taskType}s`] } });
 
-        syncedTask = find(updatedLeadersTasks, function findNewTask (updatedLeadersTask) {
-          return updatedLeadersTask.challenge.taskId === task._id;
-        });
+        syncedTask = find(
+          updatedLeadersTasks,
+          updatedLeadersTask => updatedLeadersTask.challenge.taskId === task._id,
+        );
 
-        let createdAtAfter = syncedTask.createdAt;
-        let attributeAfter = syncedTask.attribute;
+        const createdAtAfter = syncedTask.createdAt;
+        const attributeAfter = syncedTask.attribute;
 
         expect(createdAtBefore).to.eql(createdAtAfter);
         expect(attributeBefore).to.eql(attributeAfter);
@@ -142,10 +263,10 @@ describe('Challenge Model', () => {
       });
 
       it('updates tasks to challenge and challenge members', async () => {
-        let updatedTaskName = 'Updated Test Habit';
+        const updatedTaskName = 'Updated Test Habit';
         await challenge.addTasks([task]);
 
-        let req = {
+        const req = {
           body: { text: updatedTaskName },
         };
 
@@ -154,8 +275,8 @@ describe('Challenge Model', () => {
 
         await challenge.updateTask(task);
 
-        let updatedLeader = await User.findOne({_id: leader._id});
-        let updatedUserTask = await Tasks.Task.findById(updatedLeader.tasksOrder[`${taskType}s`][0]);
+        const updatedLeader = await User.findOne({ _id: leader._id });
+        const updatedUserTask = await Tasks.Task.findById(updatedLeader.tasksOrder[`${taskType}s`][0]);
 
         expect(updatedUserTask.text).to.equal(updatedTaskName);
       });
@@ -164,8 +285,8 @@ describe('Challenge Model', () => {
         await challenge.addTasks([task]);
         await challenge.removeTask(task);
 
-        let updatedLeader = await User.findOne({_id: leader._id});
-        let updatedUserTask = await Tasks.Task.findOne({_id: updatedLeader.tasksOrder[`${taskType}s`][0]}).exec();
+        const updatedLeader = await User.findOne({ _id: leader._id });
+        const updatedUserTask = await Tasks.Task.findOne({ _id: updatedLeader.tasksOrder[`${taskType}s`][0] }).exec();
 
         expect(updatedUserTask.challenge.broken).to.equal('TASK_DELETED');
       });
@@ -174,11 +295,15 @@ describe('Challenge Model', () => {
         await challenge.addTasks([task]);
         await challenge.unlinkTasks(leader, 'remove-all');
 
-        let updatedLeader = await User.findOne({_id: leader._id});
-        let updatedLeadersTasks = await Tasks.Task.find({_id: { $in: updatedLeader.tasksOrder[`${taskType}s`]}});
-        let syncedTask = find(updatedLeadersTasks, function findNewTask (updatedLeadersTask) {
-          return updatedLeadersTask.type === taskValue.type && updatedLeadersTask.text === taskValue.text;
-        });
+        const updatedLeader = await User.findOne({ _id: leader._id });
+        const updatedLeadersTasks = await Tasks.Task.find({ _id: { $in: updatedLeader.tasksOrder[`${taskType}s`] } });
+        const syncedTask = find(
+          updatedLeadersTasks,
+          updatedLeadersTask => (
+            updatedLeadersTask.type === taskValue.type
+            && updatedLeadersTask.text === taskValue.text
+          ),
+        );
 
         expect(syncedTask).to.not.exist;
       });
@@ -187,11 +312,15 @@ describe('Challenge Model', () => {
         await challenge.addTasks([task]);
         await challenge.unlinkTasks(leader, 'keep-all');
 
-        let updatedLeader = await User.findOne({_id: leader._id});
-        let updatedLeadersTasks = await Tasks.Task.find({_id: { $in: updatedLeader.tasksOrder[`${taskType}s`]}});
-        let syncedTask = find(updatedLeadersTasks, function findNewTask (updatedLeadersTask) {
-          return updatedLeadersTask.type === taskValue.type && updatedLeadersTask.text === taskValue.text;
-        });
+        const updatedLeader = await User.findOne({ _id: leader._id });
+        const updatedLeadersTasks = await Tasks.Task.find({ _id: { $in: updatedLeader.tasksOrder[`${taskType}s`] } });
+        const syncedTask = find(
+          updatedLeadersTasks,
+          updatedLeadersTask => (
+            updatedLeadersTask.type === taskValue.type
+            && updatedLeadersTask.text === taskValue.text
+          ),
+        );
 
         expect(syncedTask).to.exist;
         expect(syncedTask.challenge._id).to.be.undefined;
@@ -212,8 +341,8 @@ describe('Challenge Model', () => {
 
       await challenge.updateTask(task);
 
-      let updatedLeader = await User.findOne({_id: leader._id});
-      let updatedUserTask = await Tasks.Task.findById(updatedLeader.tasksOrder.habits[0]);
+      const updatedLeader = await User.findOne({ _id: leader._id });
+      const updatedUserTask = await Tasks.Task.findById(updatedLeader.tasksOrder.habits[0]);
 
       expect(updatedUserTask.up).to.equal(true);
       expect(updatedUserTask.down).to.equal(false);
@@ -229,8 +358,8 @@ describe('Challenge Model', () => {
       task.date = new Date();
       await challenge.updateTask(task);
 
-      let updatedLeader = await User.findOne({_id: leader._id});
-      let updatedUserTask = await Tasks.Task.findById(updatedLeader.tasksOrder.todos[0]);
+      const updatedLeader = await User.findOne({ _id: leader._id });
+      const updatedUserTask = await Tasks.Task.findById(updatedLeader.tasksOrder.todos[0]);
 
       expect(updatedUserTask.date).to.exist;
     });
@@ -247,8 +376,8 @@ describe('Challenge Model', () => {
       });
       await challenge.updateTask(task);
 
-      let updatedLeader = await User.findOne({_id: leader._id});
-      let updatedUserTask = await Tasks.Task.findById(updatedLeader.tasksOrder.todos[0]);
+      const updatedLeader = await User.findOne({ _id: leader._id });
+      const updatedUserTask = await Tasks.Task.findById(updatedLeader.tasksOrder.todos[0]);
 
       expect(updatedUserTask.checklist.toObject()).to.deep.equal([]);
     });
@@ -263,8 +392,8 @@ describe('Challenge Model', () => {
       task.everyX = 2;
       await challenge.updateTask(task);
 
-      let updatedLeader = await User.findOne({_id: leader._id});
-      let updatedUserTask = await Tasks.Task.findById(updatedLeader.tasksOrder.dailys[0]);
+      const updatedLeader = await User.findOne({ _id: leader._id });
+      const updatedUserTask = await Tasks.Task.findById(updatedLeader.tasksOrder.dailys[0]);
 
       expect(updatedUserTask.everyX).to.eql(2);
     });

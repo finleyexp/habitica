@@ -1,15 +1,12 @@
 import { authWithHeaders } from '../../middlewares/auth';
 import {
-  NotFound,
+  NotificationNotFound,
 } from '../../libs/errors';
 import {
   model as User,
 } from '../../models/user';
-import {
-  model as UserNotification,
-} from '../../models/userNotification';
 
-let api = {};
+const api = {};
 
 /**
  * @api {post} /api/v3/notifications/:notificationId/read Mark one notification as read
@@ -23,23 +20,19 @@ let api = {};
 api.readNotification = {
   method: 'POST',
   url: '/notifications/:notificationId/read',
-  middlewares: [authWithHeaders({
-    userFieldsToExclude: ['inbox'],
-  })],
+  middlewares: [authWithHeaders()],
   async handler (req, res) {
-    let user = res.locals.user;
+    const { user } = res.locals;
 
     req.checkParams('notificationId', res.t('notificationIdRequired')).notEmpty();
 
-    let validationErrors = req.validationErrors();
+    const validationErrors = req.validationErrors();
     if (validationErrors) throw validationErrors;
 
-    const index = user.notifications.findIndex(n => {
-      return n && n.id === req.params.notificationId;
-    });
+    const index = user.notifications.findIndex(n => n && n.id === req.params.notificationId);
 
     if (index === -1) {
-      throw new NotFound(res.t('messageNotificationNotFound'));
+      throw new NotificationNotFound(req.language);
     }
 
     user.notifications.splice(index, 1);
@@ -47,13 +40,13 @@ api.readNotification = {
     // Update the user version field manually,
     // it cannot be updated in the pre update hook
     // See https://github.com/HabitRPG/habitica/pull/9321#issuecomment-354187666 for more info
-    user._v++;
+    user._v += 1;
 
     await user.update({
       $pull: { notifications: { id: req.params.notificationId } },
     }).exec();
 
-    res.respond(200, UserNotification.convertNotificationsToSafeJson(user.notifications));
+    res.respond(200, user.notifications);
   },
 };
 
@@ -67,25 +60,21 @@ api.readNotification = {
 api.readNotifications = {
   method: 'POST',
   url: '/notifications/read',
-  middlewares: [authWithHeaders({
-    userFieldsToExclude: ['inbox'],
-  })],
+  middlewares: [authWithHeaders()],
   async handler (req, res) {
-    let user = res.locals.user;
+    const { user } = res.locals;
 
     req.checkBody('notificationIds', res.t('notificationsRequired')).notEmpty();
 
-    let validationErrors = req.validationErrors();
+    const validationErrors = req.validationErrors();
     if (validationErrors) throw validationErrors;
 
-    let notificationsIds = req.body.notificationIds;
-    for (let notificationId of notificationsIds) {
-      const index = user.notifications.findIndex(n => {
-        return n && n.id === notificationId;
-      });
+    const notificationsIds = req.body.notificationIds;
+    for (const notificationId of notificationsIds) {
+      const index = user.notifications.findIndex(n => n && n.id === notificationId);
 
       if (index === -1) {
-        throw new NotFound(res.t('messageNotificationNotFound'));
+        throw new NotificationNotFound(req.language);
       }
 
       user.notifications.splice(index, 1);
@@ -98,15 +87,17 @@ api.readNotifications = {
     // Update the user version field manually,
     // it cannot be updated in the pre update hook
     // See https://github.com/HabitRPG/habitica/pull/9321#issuecomment-354187666 for more info
-    user._v++;
+    user._v += 1;
 
-    res.respond(200, UserNotification.convertNotificationsToSafeJson(user.notifications));
+    res.respond(200, user.notifications);
   },
 };
 
 /**
  * @api {post} /api/v3/notifications/:notificationId/see Mark one notification as seen
- * @apiDescription Mark a notification as seen. Different from marking them as read in that the notification isn't removed but the `seen` field is set to `true`
+ * @apiDescription Mark a notification as seen.
+ * Different from marking them as read in that the notification isn't
+ * removed but the `seen` field is set to `true`.
  * @apiName SeeNotification
  * @apiGroup Notification
  *
@@ -117,25 +108,21 @@ api.readNotifications = {
 api.seeNotification = {
   method: 'POST',
   url: '/notifications/:notificationId/see',
-  middlewares: [authWithHeaders({
-    userFieldsToExclude: ['inbox'],
-  })],
+  middlewares: [authWithHeaders()],
   async handler (req, res) {
-    let user = res.locals.user;
+    const { user } = res.locals;
 
     req.checkParams('notificationId', res.t('notificationIdRequired')).notEmpty();
 
-    let validationErrors = req.validationErrors();
+    const validationErrors = req.validationErrors();
     if (validationErrors) throw validationErrors;
 
-    const notificationId = req.params.notificationId;
+    const { notificationId } = req.params;
 
-    const notification = user.notifications.find(n => {
-      return n && n.id === notificationId;
-    });
+    const notification = user.notifications.find(n => n && n.id === notificationId);
 
     if (!notification) {
-      throw new NotFound(res.t('messageNotificationNotFound'));
+      throw new NotificationNotFound(req.language);
     }
 
     notification.seen = true;
@@ -152,7 +139,7 @@ api.seeNotification = {
     // Update the user version field manually,
     // it cannot be updated in the pre update hook
     // See https://github.com/HabitRPG/habitica/pull/9321#issuecomment-354187666 for more info
-    user._v++;
+    user._v += 1;
 
     res.respond(200, notification);
   },
@@ -168,26 +155,22 @@ api.seeNotification = {
 api.seeNotifications = {
   method: 'POST',
   url: '/notifications/see',
-  middlewares: [authWithHeaders({
-    userFieldsToExclude: ['inbox'],
-  })],
+  middlewares: [authWithHeaders()],
   async handler (req, res) {
-    let user = res.locals.user;
+    const { user } = res.locals;
 
     req.checkBody('notificationIds', res.t('notificationsRequired')).notEmpty();
 
-    let validationErrors = req.validationErrors();
+    const validationErrors = req.validationErrors();
     if (validationErrors) throw validationErrors;
 
-    let notificationsIds = req.body.notificationIds;
+    const notificationsIds = req.body.notificationIds;
 
-    for (let notificationId of notificationsIds) {
-      const notification = user.notifications.find(n => {
-        return n && n.id === notificationId;
-      });
+    for (const notificationId of notificationsIds) {
+      const notification = user.notifications.find(n => n && n.id === notificationId);
 
       if (!notification) {
-        throw new NotFound(res.t('messageNotificationNotFound'));
+        throw new NotificationNotFound(req.language);
       }
 
       notification.seen = true;
@@ -195,8 +178,8 @@ api.seeNotifications = {
 
     await user.save();
 
-    res.respond(200, UserNotification.convertNotificationsToSafeJson(user.notifications));
+    res.respond(200, user.notifications);
   },
 };
 
-module.exports = api;
+export default api;

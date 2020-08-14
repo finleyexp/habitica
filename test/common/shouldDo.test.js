@@ -1,9 +1,12 @@
-import { shouldDo, DAY_MAPPING } from '../../website/common/script/cron';
 import moment from 'moment';
+import { shouldDo, DAY_MAPPING } from '../../website/common/script/cron';
 import 'moment-recur';
 
 describe('shouldDo', () => {
-  let day, dailyTask;
+  let day; let
+    dailyTask;
+  // Options is a mapping of user.preferences, therefor `timezoneOffset` still holds old zone
+  // values instead of utcOffset values.
   let options = {};
   let nextDue = [];
 
@@ -29,9 +32,9 @@ describe('shouldDo', () => {
   });
 
   it('returns false if task type is not a daily', () => {
-    expect(shouldDo(day, {type: 'todo'})).to.equal(false);
-    expect(shouldDo(day, {type: 'habit'})).to.equal(false);
-    expect(shouldDo(day, {type: 'reward'})).to.equal(false);
+    expect(shouldDo(day, { type: 'todo' })).to.equal(false);
+    expect(shouldDo(day, { type: 'habit' })).to.equal(false);
+    expect(shouldDo(day, { type: 'reward' })).to.equal(false);
   });
 
   it('returns false if startDate is in the future', () => {
@@ -51,12 +54,12 @@ describe('shouldDo', () => {
         expect(shouldDo(day, dailyTask, options)).to.equal(true);
       });
 
-      it('returns true if Start Date is today',  () => {
+      it('returns true if Start Date is today', () => {
         dailyTask.startDate = moment().toDate();
         expect(shouldDo(day, dailyTask, options)).to.equal(true);
       });
 
-      it('returns false if Start Date is after today',  () => {
+      it('returns false if Start Date is after today', () => {
         dailyTask.startDate = moment().add(1, 'days').toDate();
         expect(shouldDo(day, dailyTask, options)).to.equal(false);
       });
@@ -79,15 +82,17 @@ describe('shouldDo', () => {
 
       it('returns true if the user\'s current time is after start date and Custom Day Start', () => {
         options.dayStart = 4;
-        day = moment().zone(options.timezoneOffset).startOf('day').add(6, 'hours').toDate();
-        dailyTask.startDate = moment().zone(options.timezoneOffset).startOf('day').toDate();
+        day = moment().utcOffset(-options.timezoneOffset).startOf('day').add(6, 'hours')
+          .toDate();
+        dailyTask.startDate = moment().utcOffset(-options.timezoneOffset).startOf('day').toDate();
         expect(shouldDo(day, dailyTask, options)).to.equal(true);
       });
 
       it('returns false if the user\'s current time is before Custom Day Start', () => {
         options.dayStart = 8;
-        day = moment().zone(options.timezoneOffset).startOf('day').add(2, 'hours').toDate();
-        dailyTask.startDate = moment().zone(options.timezoneOffset).startOf('day').toDate();
+        day = moment().utcOffset(-options.timezoneOffset).startOf('day').add(2, 'hours')
+          .toDate();
+        dailyTask.startDate = moment().utcOffset(-options.timezoneOffset).startOf('day').toDate();
         expect(shouldDo(day, dailyTask, options)).to.equal(false);
       });
     });
@@ -102,20 +107,22 @@ describe('shouldDo', () => {
         expect(shouldDo(day, dailyTask, options)).to.equal(true);
       });
 
-      it('returns true if Start Date is today',  () => {
+      it('returns true if Start Date is today', () => {
         dailyTask.startDate = moment().startOf('day').toDate();
         expect(shouldDo(day, dailyTask, options)).to.equal(true);
       });
 
       it('returns true if the user\'s current time is after Custom Day Start', () => {
         options.dayStart = 4;
-        day = moment().zone(options.timezoneOffset).startOf('day').add(6, 'hours').toDate();
+        day = moment().utcOffset(-options.timezoneOffset).startOf('day').add(6, 'hours')
+          .toDate();
         expect(shouldDo(day, dailyTask, options)).to.equal(true);
       });
 
       it('returns false if the user\'s current time is before Custom Day Start', () => {
         options.dayStart = 8;
-        day = moment().zone(options.timezoneOffset).startOf('day').add(2, 'hours').toDate();
+        day = moment().utcOffset(-options.timezoneOffset).startOf('day').add(2, 'hours')
+          .toDate();
         expect(shouldDo(day, dailyTask, options)).to.equal(false);
       });
     });
@@ -228,7 +235,7 @@ describe('shouldDo', () => {
       options.timezoneOffset = 0;
       options.nextDue = true;
 
-      day = moment('2017-05-01').toDate();
+      day = moment.utc('2017-05-01').toDate();
       dailyTask.frequency = 'daily';
       dailyTask.everyX = 2;
       dailyTask.startDate = day;
@@ -335,11 +342,11 @@ describe('shouldDo', () => {
         m: false,
       };
 
-      for (let weekday of [0, 1, 2, 3, 4, 5, 6]) {
+      [0, 1, 2, 3, 4, 5, 6].forEach(weekday => {
         day = moment().day(weekday).toDate();
 
         expect(shouldDo(day, dailyTask, options)).to.equal(false);
-      }
+      });
     });
 
     it('returns false and ignore malformed repeat object', () => {
@@ -354,11 +361,11 @@ describe('shouldDo', () => {
         errors: 'errors',
       };
 
-      for (let weekday of [0, 1, 2, 3, 4, 5, 6]) {
+      [0, 1, 2, 3, 4, 5, 6].forEach(weekday => {
         day = moment().day(weekday).toDate();
 
         expect(shouldDo(day, dailyTask, options)).to.equal(false);
-      }
+      });
     });
 
     it('returns false if day of the week does not match and active on the day it matches', () => {
@@ -372,7 +379,7 @@ describe('shouldDo', () => {
         m: false,
       };
 
-      for (let weekday of [0, 1, 2, 3, 4, 5, 6]) {
+      [0, 1, 2, 3, 4, 5, 6].forEach(weekday => {
         day = moment().add(1, 'weeks').day(weekday).toDate();
 
         if (weekday === 4) {
@@ -380,7 +387,7 @@ describe('shouldDo', () => {
         } else {
           expect(shouldDo(day, dailyTask, options)).to.equal(false);
         }
-      }
+      });
     });
 
     it('returns true if Daily on matching days of the week', () => {
@@ -391,7 +398,7 @@ describe('shouldDo', () => {
       options.timezoneOffset = 0;
       options.nextDue = true;
 
-      day = moment('2017-05-01').toDate();
+      day = moment.utc('2017-05-01').toDate();
       dailyTask.frequency = 'weekly';
       dailyTask.everyX = 1;
       dailyTask.repeat = {
@@ -599,7 +606,7 @@ describe('shouldDo', () => {
       day = moment();
       dailyTask.repeat[DAY_MAPPING[day.day()]] = true;
       dailyTask.everyX = 3;
-      let tomorrow = day.add(2, 'weeks').day(day.day()).toDate();
+      const tomorrow = day.add(2, 'weeks').day(day.day()).toDate();
 
       expect(shouldDo(tomorrow, dailyTask, options)).to.equal(false);
     });
@@ -618,14 +625,14 @@ describe('shouldDo', () => {
       day = moment();
       dailyTask.repeat[DAY_MAPPING[day.day()]] = true;
       dailyTask.everyX = 3;
-      let threeWeeksFromTodayPlusOne = day.add(1, 'day').add(3, 'weeks').toDate();
+      const threeWeeksFromTodayPlusOne = day.add(1, 'day').add(3, 'weeks').toDate();
 
       expect(shouldDo(threeWeeksFromTodayPlusOne, dailyTask, options)).to.equal(false);
     });
 
     it('activates Daily on matching week', () => {
       dailyTask.everyX = 3;
-      let threeWeeksFromToday = moment().add(3, 'weeks').toDate();
+      const threeWeeksFromToday = moment().add(3, 'weeks').toDate();
 
       expect(shouldDo(threeWeeksFromToday, dailyTask, options)).to.equal(true);
     });
@@ -733,9 +740,9 @@ describe('shouldDo', () => {
     it('leaves daily inactive if not day of the month', () => {
       dailyTask.everyX = 1;
       dailyTask.frequency = 'monthly';
-      let today = moment();
+      const today = moment();
       dailyTask.daysOfMonth = [today.date()];
-      let tomorrow = today.add(1, 'day').toDate();
+      const tomorrow = today.add(1, 'day').toDate();
 
       expect(shouldDo(tomorrow, dailyTask, options)).to.equal(false);
     });
@@ -753,9 +760,9 @@ describe('shouldDo', () => {
     it('leaves daily inactive if not on date of the x month', () => {
       dailyTask.everyX = 2;
       dailyTask.frequency = 'monthly';
-      let today = moment();
+      const today = moment();
       dailyTask.daysOfMonth = [today.date()];
-      let tomorrow = today.add(2, 'months').add(1, 'day').toDate();
+      const tomorrow = today.add(2, 'months').add(1, 'day').toDate();
 
       expect(shouldDo(tomorrow, dailyTask, options)).to.equal(false);
     });
@@ -780,7 +787,7 @@ describe('shouldDo', () => {
       options.timezoneOffset = 0;
       options.nextDue = true;
 
-      day = moment('2017-05-01').toDate();
+      day = moment.utc('2017-05-01').toDate();
 
       dailyTask.frequency = 'monthly';
       dailyTask.everyX = 3;
@@ -817,7 +824,7 @@ describe('shouldDo', () => {
       expect(moment(nextDue[4]).toDate()).to.eql(moment.utc('2017-10-02').toDate());
       expect(moment(nextDue[5]).toDate()).to.eql(moment.utc('2017-11-06').toDate());
 
-      day = moment('2017-05-08').toDate();
+      day = moment.utc('2017-05-08').toDate();
 
       dailyTask.daysOfMonth = [];
       dailyTask.weeksOfMonth = [1];
@@ -841,7 +848,7 @@ describe('shouldDo', () => {
       expect(moment(nextDue[4]).toDate()).to.eql(moment.utc('2017-10-09').toDate());
       expect(moment(nextDue[5]).toDate()).to.eql(moment.utc('2017-11-13').toDate());
 
-      day = moment('2017-05-29').toDate();
+      day = moment.utc('2017-05-29').toDate();
 
       dailyTask.daysOfMonth = [];
       dailyTask.weeksOfMonth = [4];
@@ -920,9 +927,9 @@ describe('shouldDo', () => {
         m: false,
       };
 
-      let today = moment('2017-01-27');
-      let week = today.monthWeek();
-      let dayOfWeek = today.day();
+      const today = moment('2017-01-27');
+      const week = today.monthWeek();
+      const dayOfWeek = today.day();
       dailyTask.startDate = today.toDate();
       dailyTask.weeksOfMonth = [week];
       dailyTask.repeat[DAY_MAPPING[dayOfWeek]] = true;
@@ -944,8 +951,8 @@ describe('shouldDo', () => {
         m: false,
       };
 
-      let today = moment('2017-05-27T17:34:40.000Z');
-      let week = today.monthWeek();
+      const today = moment('2017-05-27T17:34:40.000Z');
+      const week = today.monthWeek();
       dailyTask.startDate = today.toDate();
       dailyTask.weeksOfMonth = [week];
       dailyTask.everyX = 1;
@@ -966,9 +973,9 @@ describe('shouldDo', () => {
         m: false,
       };
 
-      let today = moment('2017-01-27:00:00.000-00:00');
-      let week = today.monthWeek();
-      let dayOfWeek = today.day();
+      const today = moment('2017-01-27:00:00.000-00:00');
+      const week = today.monthWeek();
+      const dayOfWeek = today.day();
       dailyTask.startDate = today.toDate();
       dailyTask.weeksOfMonth = [week];
       dailyTask.repeat[DAY_MAPPING[dayOfWeek]] = true;
@@ -990,9 +997,9 @@ describe('shouldDo', () => {
         m: false,
       };
 
-      let today = moment('2017-01-26:00:00.000-00:00');
-      let week = today.monthWeek();
-      let dayOfWeek = today.day();
+      const today = moment('2017-01-26:00:00.000-00:00');
+      const week = today.monthWeek();
+      const dayOfWeek = today.day();
       dailyTask.startDate = today.toDate();
       dailyTask.weeksOfMonth = [week];
       dailyTask.repeat[DAY_MAPPING[dayOfWeek]] = true;
@@ -1015,9 +1022,9 @@ describe('shouldDo', () => {
         m: false,
       };
 
-      let today = moment('2017-01-27:00:00.000-00:00');
-      let week = today.monthWeek();
-      let dayOfWeek = today.day();
+      const today = moment('2017-01-27:00:00.000-00:00');
+      const week = today.monthWeek();
+      const dayOfWeek = today.day();
       dailyTask.startDate = today.toDate();
       dailyTask.weeksOfMonth = [week];
       dailyTask.repeat[DAY_MAPPING[dayOfWeek]] = true;
@@ -1040,9 +1047,9 @@ describe('shouldDo', () => {
         m: false,
       };
 
-      let today = moment('2017-01-27:00:00.000-00:00');
-      let week = today.monthWeek();
-      let dayOfWeek = today.day();
+      const today = moment('2017-01-27:00:00.000-00:00');
+      const week = today.monthWeek();
+      const dayOfWeek = today.day();
       dailyTask.startDate = today.toDate();
       dailyTask.weeksOfMonth = [week];
       dailyTask.repeat[DAY_MAPPING[dayOfWeek]] = true;
@@ -1066,9 +1073,9 @@ describe('shouldDo', () => {
           m: false,
         };
 
-        let today = moment('2017-01-27');
-        let week = today.monthWeek();
-        let dayOfWeek = today.day();
+        const today = moment('2017-01-27');
+        const week = today.monthWeek();
+        const dayOfWeek = today.day();
         dailyTask.startDate = today.toDate();
         dailyTask.weeksOfMonth = [week];
         dailyTask.repeat[DAY_MAPPING[dayOfWeek]] = true;
@@ -1143,7 +1150,7 @@ describe('shouldDo', () => {
       options.timezoneOffset = 0;
       options.nextDue = true;
 
-      day = moment('2017-05-01').toDate();
+      day = moment.utc('2017-05-01').toDate();
 
       dailyTask.frequency = 'yearly';
       dailyTask.everyX = 5;

@@ -14,8 +14,6 @@ import addTag from './addTag';
 import sortTag from './sortTag';
 import updateTag from './updateTag';
 import deleteTag from './deleteTag';
-import clearPMs from './clearPMs';
-import deletePM from './deletePM';
 import blockUser from './blockUser';
 import feed from './feed';
 import releasePets from './releasePets';
@@ -34,7 +32,7 @@ import scoreTask from './scoreTask';
 import markPmsRead from './markPMSRead';
 import * as pinnedGearUtils from './pinnedGearUtils';
 
-module.exports = {
+export default {
   sleep,
   revive,
   reset,
@@ -50,8 +48,6 @@ module.exports = {
   sortTag,
   updateTag,
   deleteTag,
-  clearPMs,
-  deletePM,
   blockUser,
   feed,
   releasePets,

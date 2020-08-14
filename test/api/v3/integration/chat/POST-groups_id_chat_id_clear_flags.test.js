@@ -1,27 +1,29 @@
+import moment from 'moment';
+import { v4 as generateUUID } from 'uuid';
 import {
   createAndPopulateGroup,
   generateUser,
   translate as t,
 } from '../../../../helpers/api-integration/v3';
 import config from '../../../../../config.json';
-import { v4 as generateUUID } from 'uuid';
 
 describe('POST /groups/:id/chat/:id/clearflags', () => {
-  let groupWithChat, message, author, nonAdmin, admin;
+  const USER_AGE_FOR_FLAGGING = 3;
+  let groupWithChat; let message; let author; let nonAdmin; let
+    admin;
 
   before(async () => {
-    let { group, groupLeader, members } = await createAndPopulateGroup({
+    const { group, groupLeader } = await createAndPopulateGroup({
       groupDetails: {
         type: 'guild',
         privacy: 'public',
       },
-      members: 1,
     });
 
     groupWithChat = group;
     author = groupLeader;
-    nonAdmin = members[0];
-    admin = await generateUser({'contributor.admin': true});
+    nonAdmin = await generateUser({ 'auth.timestamps.created': moment().subtract(USER_AGE_FOR_FLAGGING + 1, 'days').toDate() });
+    admin = await generateUser({ 'contributor.admin': true });
 
     message = await author.post(`/groups/${groupWithChat._id}/chat`, { message: 'Some message' });
     message = message.message;
@@ -29,17 +31,15 @@ describe('POST /groups/:id/chat/:id/clearflags', () => {
   });
 
   context('Single Message', () => {
-    it('returns error when non-admin attempts to clear flags', async () => {
-      return expect(nonAdmin.post(`/groups/${groupWithChat._id}/chat/${message.id}/clearflags`))
-        .to.eventually.be.rejected.and.eql({
-          code: 401,
-          error: 'NotAuthorized',
-          message: t('messageGroupChatAdminClearFlagCount'),
-        });
-    });
+    it('returns error when non-admin attempts to clear flags', async () => expect(nonAdmin.post(`/groups/${groupWithChat._id}/chat/${message.id}/clearflags`))
+      .to.eventually.be.rejected.and.eql({
+        code: 401,
+        error: 'NotAuthorized',
+        message: t('messageGroupChatAdminClearFlagCount'),
+      }));
 
     it('returns error if message does not exist', async () => {
-      let fakeMessageID = generateUUID();
+      const fakeMessageID = generateUUID();
 
       await expect(admin.post(`/groups/${groupWithChat._id}/chat/${fakeMessageID}/clearflags`))
         .to.eventually.be.rejected.and.eql({
@@ -51,13 +51,13 @@ describe('POST /groups/:id/chat/:id/clearflags', () => {
 
     it('clears flags and leaves old flags on the flag object', async () => {
       await admin.post(`/groups/${groupWithChat._id}/chat/${message.id}/clearflags`);
-      let messages = await admin.get(`/groups/${groupWithChat._id}/chat`);
+      const messages = await admin.get(`/groups/${groupWithChat._id}/chat`);
       expect(messages[0].flagCount).to.eql(0);
       expect(messages[0].flags).to.have.property(admin._id, true);
     });
 
     it('clears flags in a private group', async () => {
-      let { group, members } = await createAndPopulateGroup({
+      const { group, members } = await createAndPopulateGroup({
         groupDetails: {
           type: 'party',
           privacy: 'private',
@@ -69,14 +69,19 @@ describe('POST /groups/:id/chat/:id/clearflags', () => {
       privateMessage = privateMessage.message;
 
       await admin.post(`/groups/${group._id}/chat/${privateMessage.id}/flag`);
+
+      // first test that the flag was actually successful
+      let messages = await members[0].get(`/groups/${group._id}/chat`);
+      expect(messages[0].flagCount).to.eql(5);
+
       await admin.post(`/groups/${group._id}/chat/${privateMessage.id}/clearflags`);
 
-      let messages = await members[0].get(`/groups/${group._id}/chat`);
+      messages = await members[0].get(`/groups/${group._id}/chat`);
       expect(messages[0].flagCount).to.eql(0);
     });
 
     it('can\'t flag a system message', async () => {
-      let { group, members } = await createAndPopulateGroup({
+      const { group, members } = await createAndPopulateGroup({
         groupDetails: {
           type: 'party',
           privacy: 'private',
@@ -84,7 +89,7 @@ describe('POST /groups/:id/chat/:id/clearflags', () => {
         members: 1,
       });
 
-      let member = members[0];
+      const member = members[0];
 
       // make member that can use skills
       await member.update({
@@ -95,12 +100,12 @@ describe('POST /groups/:id/chat/:id/clearflags', () => {
 
       await member.post('/user/class/cast/mpheal');
 
-      let [skillMsg] = await member.get(`/groups/${group.id}/chat`);
+      const [skillMsg] = await member.get(`/groups/${group.id}/chat`);
       await expect(member.post(`/groups/${group._id}/chat/${skillMsg.id}/flag`))
         .to.eventually.be.rejected.and.eql({
           code: 400,
           error: 'BadRequest',
-          message: t('messageCannotFlagSystemMessages', {communityManagerEmail: config.EMAILS.COMMUNITY_MANAGER_EMAIL}),
+          message: t('messageCannotFlagSystemMessages', { communityManagerEmail: config.EMAILS_COMMUNITY_MANAGER_EMAIL }),
         });
       // let messages = await members[0].get(`/groups/${group._id}/chat`);
       // expect(messages[0].id).to.eql(skillMsg.id);
@@ -109,7 +114,8 @@ describe('POST /groups/:id/chat/:id/clearflags', () => {
   });
 
   context('admin user, group with multiple messages', () => {
-    let message2, message3, message4;
+    let message2; let message3; let
+      message4;
 
     before(async () => {
       message2 = await author.post(`/groups/${groupWithChat._id}/chat`, { message: 'Some message 2' });
@@ -127,14 +133,14 @@ describe('POST /groups/:id/chat/:id/clearflags', () => {
 
     it('changes only the message that is flagged', async () => {
       await admin.post(`/groups/${groupWithChat._id}/chat/${message.id}/clearflags`);
-      let messages = await admin.get(`/groups/${groupWithChat._id}/chat`);
+      const messages = await admin.get(`/groups/${groupWithChat._id}/chat`);
 
       expect(messages).to.have.lengthOf(4);
 
-      let messageThatWasUnflagged = messages[3];
-      let messageWith1Flag = messages[2];
-      let messageWith2Flag = messages[1];
-      let messageWithoutFlags = messages[0];
+      const messageThatWasUnflagged = messages[3];
+      const messageWith1Flag = messages[2];
+      const messageWith2Flag = messages[1];
+      const messageWithoutFlags = messages[0];
 
       expect(messageThatWasUnflagged.flagCount).to.eql(0);
       expect(messageThatWasUnflagged.flags).to.have.property(admin._id, true);

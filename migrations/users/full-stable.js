@@ -1,117 +1,88 @@
+/* eslint-disable no-console */
 import each from 'lodash/each';
 import keys from 'lodash/keys';
 import content from '../../website/common/script/content/index';
-const migrationName = 'full-stable.js';
-const authorName = 'Sabe'; // in case script author needs to know when their ...
-const authorUuid = '7f14ed62-5408-4e1b-be83-ada62d504931'; // ... own data is done
+
+import { model as User } from '../../website/server/models/user';
+
+const MIGRATION_NAME = 'full-stable';
+
+const progressCount = 1000;
+let count = 0;
 
 /*
  * Award users every extant pet and mount
  */
-const connectionString = 'mongodb://localhost:27017/habitrpg?auto_reconnect=true'; // FOR TEST DATABASE
 
-let monk = require('monk');
-let dbUsers = monk(connectionString).get('users', { castIds: false });
+async function updateUser (user) {
+  count += 1;
 
-function processUsers (lastId) {
-  // specify a query to limit the affected users (empty for all users):
-  let query = {
-    'profile.name': 'SabreCat',
+  const set = {};
+
+  set.migration = MIGRATION_NAME;
+
+  each(keys(content.pets), pet => {
+    set[`items.pets.${pet}`] = 5;
+  });
+  each(keys(content.premiumPets), pet => {
+    set[`items.pets.${pet}`] = 5;
+  });
+  each(keys(content.questPets), pet => {
+    set[`items.pets.${pet}`] = 5;
+  });
+  each(keys(content.specialPets), pet => {
+    set[`items.pets.${pet}`] = 5;
+  });
+  each(keys(content.wackyPets), pet => {
+    set[`items.pets.${pet}`] = 5;
+  });
+  each(keys(content.mounts), mount => {
+    set[`items.mounts.${mount}`] = true;
+  });
+  each(keys(content.premiumMounts), mount => {
+    set[`items.mounts.${mount}`] = true;
+  });
+  each(keys(content.questMounts), mount => {
+    set[`items.mounts.${mount}`] = true;
+  });
+  each(keys(content.specialMounts), mount => {
+    set[`items.mounts.${mount}`] = true;
+  });
+
+  if (count % progressCount === 0) console.warn(`${count} ${user._id}`);
+
+  return User.update({ _id: user._id }, { $set: set }).exec();
+}
+
+export default async function processUsers () {
+  const query = {
+    migration: { $ne: MIGRATION_NAME },
+    'auth.local.username': 'SabreTest',
   };
 
-  if (lastId) {
-    query._id = {
-      $gt: lastId,
-    };
-  }
-
-  dbUsers.find(query, {
-    sort: {_id: 1},
-    limit: 250,
-    fields: [
-    ], // specify fields we are interested in to limit retrieved data (empty if we're not reading data):
-  })
-    .then(updateUsers)
-    .catch((err) => {
-      console.log(err);
-      return exiting(1, `ERROR! ${  err}`);
-    });
-}
-
-let progressCount = 1000;
-let count = 0;
-
-function updateUsers (users) {
-  if (!users || users.length === 0) {
-    console.warn('All appropriate users found and modified.');
-    displayData();
-    return;
-  }
-
-  let userPromises = users.map(updateUser);
-  let lastUser = users[users.length - 1];
-
-  return Promise.all(userPromises)
-    .then(() => {
-      processUsers(lastUser._id);
-    });
-}
-
-function updateUser (user) {
-  count++;
-  let set = {
-    migration: migrationName,
+  const fields = {
+    _id: 1,
   };
 
-  each(keys(content.pets), (pet) => {
-    set[`items.pets.${pet}`] = 5;
-  });
-  each(keys(content.premiumPets), (pet) => {
-    set[`items.pets.${pet}`] = 5;
-  });
-  each(keys(content.questPets), (pet) => {
-    set[`items.pets.${pet}`] = 5;
-  });
-  each(keys(content.specialPets), (pet) => {
-    set[`items.pets.${pet}`] = 5;
-  });
-  each(keys(content.mounts), (mount) => {
-    set[`items.mounts.${mount}`] = true;
-  });
-  each(keys(content.premiumMounts), (mount) => {
-    set[`items.mounts.${mount}`] = true;
-  });
-  each(keys(content.questMounts), (mount) => {
-    set[`items.mounts.${mount}`] = true;
-  });
-  each(keys(content.specialMounts), (mount) => {
-    set[`items.mounts.${mount}`] = true;
-  });
+  while (true) { // eslint-disable-line no-constant-condition
+    const users = await User // eslint-disable-line no-await-in-loop
+      .find(query)
+      .limit(250)
+      .sort({ _id: 1 })
+      .select(fields)
+      .lean()
+      .exec();
 
-  dbUsers.update({_id: user._id}, {$set: set});
-
-  if (count % progressCount === 0) console.warn(`${count  } ${  user._id}`);
-  if (user._id === authorUuid) console.warn(`${authorName  } processed`);
-}
-
-function displayData () {
-  console.warn(`\n${  count  } users processed\n`);
-  return exiting(0);
-}
-
-function exiting (code, msg) {
-  code = code || 0; // 0 = success
-  if (code && !msg) {
-    msg = 'ERROR!';
-  }
-  if (msg) {
-    if (code) {
-      console.error(msg);
-    } else      {
-      console.log(msg);
+    if (users.length === 0) {
+      console.warn('All appropriate users found and modified.');
+      console.warn(`\n${count} users processed\n`);
+      break;
+    } else {
+      query._id = {
+        $gt: users[users.length - 1],
+      };
     }
-  }
-  process.exit(code);
-}
 
-module.exports = processUsers;
+    await Promise.all(users.map(updateUser)); // eslint-disable-line no-await-in-loop
+  }
+}

@@ -1,7 +1,9 @@
 import { authWithHeaders } from '../../middlewares/auth';
-import { shops } from '../../../common/';
+import common from '../../../common';
 
-let api = {};
+const { shops } = common;
+
+const api = {};
 
 /**
  * @apiIgnore
@@ -15,13 +17,11 @@ let api = {};
 api.getMarketItems = {
   method: 'GET',
   url: '/shops/market',
-  middlewares: [authWithHeaders({
-    userFieldsToExclude: ['inbox'],
-  })],
+  middlewares: [authWithHeaders()],
   async handler (req, res) {
-    let user = res.locals.user;
+    const { user } = res.locals;
 
-    let resObject = shops.getMarketShop(user, req.language);
+    const resObject = shops.getMarketShop(user, req.language);
 
     res.respond(200, resObject);
   },
@@ -38,13 +38,11 @@ api.getMarketItems = {
 api.getMarketGear = {
   method: 'GET',
   url: '/shops/market-gear',
-  middlewares: [authWithHeaders({
-    userFieldsToExclude: ['inbox'],
-  })],
+  middlewares: [authWithHeaders()],
   async handler (req, res) {
-    let user = res.locals.user;
+    const { user } = res.locals;
 
-    let resObject = {
+    const resObject = {
       categories: shops.getMarketGearCategories(user, req.language),
     };
 
@@ -64,13 +62,11 @@ api.getMarketGear = {
 api.getQuestShopItems = {
   method: 'GET',
   url: '/shops/quests',
-  middlewares: [authWithHeaders({
-    userFieldsToExclude: ['inbox'],
-  })],
+  middlewares: [authWithHeaders()],
   async handler (req, res) {
-    let user = res.locals.user;
+    const { user } = res.locals;
 
-    let resObject = shops.getQuestShop(user, req.language);
+    const resObject = shops.getQuestShop(user, req.language);
 
     res.respond(200, resObject);
   },
@@ -88,13 +84,11 @@ api.getQuestShopItems = {
 api.getTimeTravelerShopItems = {
   method: 'GET',
   url: '/shops/time-travelers',
-  middlewares: [authWithHeaders({
-    userFieldsToExclude: ['inbox'],
-  })],
+  middlewares: [authWithHeaders()],
   async handler (req, res) {
-    let user = res.locals.user;
+    const { user } = res.locals;
 
-    let resObject = shops.getTimeTravelersShop(user, req.language);
+    const resObject = shops.getTimeTravelersShop(user, req.language);
 
     res.respond(200, resObject);
   },
@@ -112,13 +106,11 @@ api.getTimeTravelerShopItems = {
 api.getSeasonalShopItems = {
   method: 'GET',
   url: '/shops/seasonal',
-  middlewares: [authWithHeaders({
-    userFieldsToExclude: ['inbox'],
-  })],
+  middlewares: [authWithHeaders()],
   async handler (req, res) {
-    let user = res.locals.user;
+    const { user } = res.locals;
 
-    let resObject = shops.getSeasonalShop(user, req.language);
+    const resObject = shops.getSeasonalShop(user, req.language);
 
     res.respond(200, resObject);
   },
@@ -136,13 +128,11 @@ api.getSeasonalShopItems = {
 api.getBackgroundShopItems = {
   method: 'GET',
   url: '/shops/backgrounds',
-  middlewares: [authWithHeaders({
-    userFieldsToExclude: ['inbox'],
-  })],
+  middlewares: [authWithHeaders()],
   async handler (req, res) {
-    let user = res.locals.user;
+    const { user } = res.locals;
 
-    let resObject = {
+    const resObject = {
       identifier: 'backgroundShop',
       text: res.t('backgroundShop'),
       notes: res.t('backgroundShopText'),
@@ -154,4 +144,4 @@ api.getBackgroundShopItems = {
   },
 };
 
-module.exports = api;
+export default api;

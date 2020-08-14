@@ -1,17 +1,17 @@
-import hair from './hair';
-import shirts from './shirt.js';
-import skins from './skin.js';
-import sizes from './size.js';
-import backgrounds from './backgrounds.js';
-import chairs from './chair.js';
 import forOwn from 'lodash/forOwn';
 import clone from 'lodash/clone';
+import hair from './hair';
+import shirts from './shirt';
+import skins from './skin';
+import sizes from './size';
+import backgrounds from './backgrounds';
+import chairs from './chair';
 
-let reorderedBgs = {};
+const reorderedBgs = {};
 
-forOwn(backgrounds, function restructureBackgroundSet (value, key) {
-  forOwn(value, function restructureBackground (bgObject, bgKey) {
-    let bg = clone(bgObject);
+forOwn(backgrounds, (value, key) => {
+  forOwn(value, (bgObject, bgKey) => {
+    const bg = clone(bgObject);
     bg.set = {
       text: key,
       key,
@@ -21,8 +21,7 @@ forOwn(backgrounds, function restructureBackgroundSet (value, key) {
   });
 });
 
-
-let appearances = {
+const appearances = {
   hair,
   shirt: shirts,
   size: sizes,
@@ -31,4 +30,4 @@ let appearances = {
   background: reorderedBgs,
 };
 
-module.exports = appearances;
+export default appearances;

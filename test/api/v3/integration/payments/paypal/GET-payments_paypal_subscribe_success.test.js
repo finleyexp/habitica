@@ -5,7 +5,7 @@ import apiError from '../../../../../../website/server/libs/apiError';
 import paypalPayments from '../../../../../../website/server/libs/payments/paypal';
 
 describe('payments : paypal #subscribeSuccess', () => {
-  let endpoint = '/paypal/subscribe/success';
+  const endpoint = '/paypal/subscribe/success';
   let user;
 
   beforeEach(async () => {
@@ -24,7 +24,7 @@ describe('payments : paypal #subscribeSuccess', () => {
     let subscribeSuccessStub;
 
     beforeEach(async () => {
-      subscribeSuccessStub = sinon.stub(paypalPayments, 'subscribeSuccess').returnsPromise().resolves({});
+      subscribeSuccessStub = sinon.stub(paypalPayments, 'subscribeSuccess').resolves({});
     });
 
     afterEach(() => {
@@ -32,7 +32,7 @@ describe('payments : paypal #subscribeSuccess', () => {
     });
 
     it('creates a subscription', async () => {
-      let token = 'test-token';
+      const token = 'test-token';
 
       user = await generateUser({
         'profile.name': 'sender',

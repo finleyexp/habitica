@@ -21,12 +21,12 @@ describe('POST /user/buy-gear/:key', () => {
       .to.eventually.be.rejected.and.eql({
         code: 404,
         error: 'NotFound',
-        message: apiError('itemNotFound', {key: 'notExisting'}),
+        message: apiError('itemNotFound', { key: 'notExisting' }),
       });
   });
 
   it('buys the first level weapon gear', async () => {
-    let key = 'weapon_warrior_0';
+    const key = 'weapon_warrior_0';
 
     await user.post(`/user/buy-gear/${key}`);
     await user.sync();
@@ -35,7 +35,7 @@ describe('POST /user/buy-gear/:key', () => {
   });
 
   it('buys the first level armor gear', async () => {
-    let key = 'armor_warrior_1';
+    const key = 'armor_warrior_1';
 
     await user.post(`/user/buy-gear/${key}`);
     await user.sync();
@@ -44,13 +44,24 @@ describe('POST /user/buy-gear/:key', () => {
   });
 
   it('tries to buy subsequent, level gear', async () => {
-    let key = 'armor_warrior_2';
+    const key = 'armor_warrior_2';
 
     return expect(user.post(`/user/buy-gear/${key}`))
       .to.eventually.be.rejected.and.eql({
         code: 401,
         error: 'NotAuthorized',
         message: 'You need to purchase a lower level gear before this one.',
+      });
+  });
+
+  it('returns an error if tries to buy gear from a different class', async () => {
+    const key = 'armor_rogue_1';
+
+    return expect(user.post(`/user/buy-gear/${key}`))
+      .to.eventually.be.rejected.and.eql({
+        code: 401,
+        error: 'NotAuthorized',
+        message: 'You can\'t buy this item.',
       });
   });
 });

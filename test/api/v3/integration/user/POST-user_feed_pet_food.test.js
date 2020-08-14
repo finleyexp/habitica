@@ -1,5 +1,6 @@
 /* eslint-disable camelcase */
 
+import { v4 as generateUUID } from 'uuid';
 import {
   generateUser,
   translate as t,
@@ -7,7 +8,6 @@ import {
   sleep,
 } from '../../../../helpers/api-integration/v3';
 import content from '../../../../../website/common/script/content';
-import { v4 as generateUUID } from 'uuid';
 
 describe('POST /user/feed/:pet/:food', () => {
   let user;
@@ -24,10 +24,10 @@ describe('POST /user/feed/:pet/:food', () => {
       'items.food.Milk': 2,
     });
 
-    let food = content.food.Milk;
-    let pet = content.petInfo['Wolf-Base'];
+    const food = content.food.Milk;
+    const pet = content.petInfo['Wolf-Base'];
 
-    let res = await user.post('/user/feed/Wolf-Base/Milk');
+    const res = await user.post('/user/feed/Wolf-Base/Milk');
     await user.sync();
     expect(res).to.eql({
       data: user.items.pets['Wolf-Base'],
@@ -41,6 +41,29 @@ describe('POST /user/feed/:pet/:food', () => {
     expect(user.items.pets['Wolf-Base']).to.equal(7);
   });
 
+  it('bulk feeding pet with non-preferred food', async () => {
+    await user.update({
+      'items.pets.Wolf-Base': 5,
+      'items.food.Milk': 3,
+    });
+
+    const food = content.food.Milk;
+    const pet = content.petInfo['Wolf-Base'];
+
+    const res = await user.post('/user/feed/Wolf-Base/Milk?amount=2');
+    await user.sync();
+    expect(res).to.eql({
+      data: user.items.pets['Wolf-Base'],
+      message: t('messageDontEnjoyFood', {
+        egg: pet.text(),
+        foodText: food.textThe(),
+      }),
+    });
+
+    expect(user.items.food.Milk).to.eql(1);
+    expect(user.items.pets['Wolf-Base']).to.equal(9);
+  });
+
   context('sending user activity webhooks', () => {
     before(async () => {
       await server.start();
@@ -51,7 +74,7 @@ describe('POST /user/feed/:pet/:food', () => {
     });
 
     it('sends user activity webhook when a new mount is raised', async () => {
-      let uuid = generateUUID();
+      const uuid = generateUUID();
 
       await user.post('/user/webhook', {
         url: `http://localhost:${server.port}/webhooks/${uuid}`,
@@ -66,12 +89,41 @@ describe('POST /user/feed/:pet/:food', () => {
         'items.pets.Wolf-Base': 49,
         'items.food.Milk': 2,
       });
-      let res = await user.post('/user/feed/Wolf-Base/Milk');
+      const res = await user.post('/user/feed/Wolf-Base/Milk');
 
       await sleep();
 
-      let body = server.getWebhookData(uuid);
+      const body = server.getWebhookData(uuid);
 
+      expect(user.achievements.allYourBase).to.not.equal(true);
+      expect(body.type).to.eql('mountRaised');
+      expect(body.pet).to.eql('Wolf-Base');
+      expect(body.message).to.eql(res.message);
+    });
+
+    it('sends user activity webhook (mount raised after full bulk feeding)', async () => {
+      const uuid = generateUUID();
+
+      await user.post('/user/webhook', {
+        url: `http://localhost:${server.port}/webhooks/${uuid}`,
+        type: 'userActivity',
+        enabled: true,
+        options: {
+          mountRaised: true,
+        },
+      });
+
+      await user.update({
+        'items.pets.Wolf-Base': 47,
+        'items.food.Milk': 3,
+      });
+      const res = await user.post('/user/feed/Wolf-Base/Milk?amount=2');
+
+      await sleep();
+
+      const body = server.getWebhookData(uuid);
+
+      expect(user.achievements.allYourBase).to.not.equal(true);
       expect(body.type).to.eql('mountRaised');
       expect(body.pet).to.eql('Wolf-Base');
       expect(body.message).to.eql(res.message);

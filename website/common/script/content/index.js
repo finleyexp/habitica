@@ -2,20 +2,21 @@ import defaults from 'lodash/defaults';
 import each from 'lodash/each';
 import moment from 'moment';
 import t from './translation';
+import { tasksByCategory } from './tasks';
 
 import {
   CLASSES,
   GEAR_TYPES,
   ITEM_LIST,
+  QUEST_SERIES_ACHIEVEMENTS,
+  ANIMAL_COLOR_ACHIEVEMENTS,
 } from './constants';
-
-let api = module.exports;
 
 import achievements from './achievements';
 
-import eggs from './eggs';
-import hatchingPotions from './hatching-potions';
-import stable from './stable';
+import * as eggs from './eggs';
+import * as hatchingPotions from './hatching-potions';
+import * as stable from './stable';
 import gear from './gear';
 import {
   quests,
@@ -24,8 +25,9 @@ import {
 } from './quests';
 
 import appearances from './appearance';
-import {backgroundsTree, backgroundsFlat} from './appearance/backgrounds';
-import spells from './spells';
+import { backgroundsTree, backgroundsFlat } from './appearance/backgrounds';
+import bundles from './bundles';
+import spells from './spells'; // eslint-disable-line import/no-cycle
 import subscriptionBlocks from './subscriptionBlocks';
 import faq from './faq';
 import timeTravelers from './time-travelers';
@@ -34,7 +36,11 @@ import loginIncentives from './loginIncentives';
 
 import officialPinnedItems from './officialPinnedItems';
 
+const api = {};
+
 api.achievements = achievements;
+api.questSeriesAchievements = QUEST_SERIES_ACHIEVEMENTS;
+api.animalColorAchievements = ANIMAL_COLOR_ACHIEVEMENTS;
 
 api.quests = quests;
 api.questsByLevel = questsByLevel;
@@ -53,136 +59,7 @@ api.timeTravelerStore = timeTravelers.timeTravelerStore;
 
 api.officialPinnedItems = officialPinnedItems;
 
-/*
-   ---------------------------------------------------------------
-   Discounted Item Bundles
-   ---------------------------------------------------------------
-   */
-
-api.bundles = {
-  featheredFriends: {
-    key: 'featheredFriends',
-    text: t('featheredFriendsText'),
-    notes: t('featheredFriendsNotes'),
-    bundleKeys: [
-      'falcon',
-      'harpy',
-      'owl',
-    ],
-    canBuy () {
-      return moment().isBetween('2017-05-16', '2017-05-31');
-    },
-    type: 'quests',
-    class: 'quest_bundle_featheredFriends',
-    value: 7,
-  },
-  splashyPals: {
-    key: 'splashyPals',
-    text: t('splashyPalsText'),
-    notes: t('splashyPalsNotes'),
-    bundleKeys: [
-      'dilatory_derby',
-      'turtle',
-      'whale',
-    ],
-    canBuy () {
-      return moment().isBetween('2017-07-11', '2017-08-02');
-    },
-    type: 'quests',
-    class: 'quest_bundle_splashyPals',
-    value: 7,
-  },
-  farmFriends: {
-    key: 'farmFriends',
-    text: t('farmFriendsText'),
-    notes: t('farmFriendsNotes'),
-    bundleKeys: [
-      'cow',
-      'horse',
-      'sheep',
-    ],
-    canBuy () {
-      return moment().isBetween('2017-09-12', '2017-10-07');
-    },
-    type: 'quests',
-    value: 7,
-  },
-  witchyFamiliars: {
-    key: 'witchyFamiliars',
-    text: t('witchyFamiliarsText'),
-    notes: t('witchyFamiliarsNotes'),
-    bundleKeys: [
-      'rat',
-      'spider',
-      'frog',
-    ],
-    canBuy () {
-      return moment().isBetween('2017-10-10', '2017-11-02');
-    },
-    type: 'quests',
-    value: 7,
-  },
-  winterQuests: {
-    key: 'winterQuests',
-    text: t('winterQuestsText'),
-    notes: t('winterQuestsNotes'),
-    bundleKeys: [
-      'evilsanta',
-      'evilsanta2',
-      'penguin',
-    ],
-    canBuy () {
-      return moment().isBetween('2017-12-14', '2018-01-01');
-    },
-    type: 'quests',
-    value: 7,
-  },
-  hugabug: {
-    key: 'hugabug',
-    text: t('hugabugText'),
-    notes: t('hugabugNotes'),
-    bundleKeys: [
-      'snail',
-      'beetle',
-      'butterfly',
-    ],
-    canBuy () {
-      return moment().isBetween('2018-02-06', '2018-04-02');
-    },
-    type: 'quests',
-    value: 7,
-  },
-  cuddleBuddies: {
-    key: 'cuddleBuddies',
-    text: t('cuddleBuddiesText'),
-    notes: t('cuddleBuddiesNotes'),
-    bundleKeys: [
-      'bunny',
-      'ferret',
-      'guineapig',
-    ],
-    canBuy () {
-      return moment().isBetween('2018-05-08', '2018-06-02');
-    },
-    type: 'quests',
-    value: 7,
-  },
-  aquaticAmigos: {
-    key: 'aquaticAmigos',
-    text: t('aquaticAmigosText'),
-    notes: t('aquaticAmigosNotes'),
-    bundleKeys: [
-      'axolotl',
-      'kraken',
-      'octopus',
-    ],
-    canBuy () {
-      return moment().isBetween('2018-06-12', '2018-07-02');
-    },
-    type: 'quests',
-    value: 7,
-  },
-};
+api.bundles = bundles;
 
 /*
    ---------------------------------------------------------------
@@ -205,7 +82,7 @@ api.armoire = {
     if (user.flags.armoireEmpty) {
       return t('armoireNotesEmpty')();
     }
-    return t('armoireNotesFull')() + count;
+    return `${t('armoireNotesFull')()} ${count}`;
   },
   value: 100,
   key: 'armoire',
@@ -214,7 +91,6 @@ api.armoire = {
   },
 };
 
-
 /*
    ---------------------------------------------------------------
    Classes
@@ -222,7 +98,6 @@ api.armoire = {
    */
 
 api.classes = CLASSES;
-
 
 /*
    ---------------------------------------------------------------
@@ -241,6 +116,7 @@ api.cardTypes = {
   nye: {
     key: 'nye',
     messageOptions: 5,
+    yearRound: moment().isBefore('2020-01-02'),
   },
   thankyou: {
     key: 'thankyou',
@@ -250,6 +126,7 @@ api.cardTypes = {
   valentine: {
     key: 'valentine',
     messageOptions: 4,
+    yearRound: moment().isBefore('2020-03-02'),
   },
   birthday: {
     key: 'birthday',
@@ -285,23 +162,27 @@ api.timeTravelStable = {
     'MantisShrimp-Base': t('mantisShrimp'),
     'Phoenix-Base': t('phoenix'),
     'MagicalBee-Base': t('magicalBee'),
+    'Hippogriff-Hopeful': t('hopefulHippogriffPet'),
   },
   mounts: {
     'Mammoth-Base': t('mammoth'),
     'MantisShrimp-Base': t('mantisShrimp'),
     'Phoenix-Base': t('phoenix'),
     'MagicalBee-Base': t('magicalBee'),
+    'Hippogriff-Hopeful': t('hopefulHippogriffMount'),
   },
 };
 
 api.dropHatchingPotions = hatchingPotions.drops;
 api.premiumHatchingPotions = hatchingPotions.premium;
+api.wackyHatchingPotions = hatchingPotions.wacky;
 api.hatchingPotions = hatchingPotions.all;
 
 api.pets = stable.dropPets;
 api.premiumPets = stable.premiumPets;
 api.questPets = stable.questPets;
 api.specialPets = stable.specialPets;
+api.wackyPets = stable.wackyPets;
 api.petInfo = stable.petInfo;
 
 api.mounts = stable.dropMounts;
@@ -310,13 +191,9 @@ api.premiumMounts = stable.premiumMounts;
 api.specialMounts = stable.specialMounts;
 api.mountInfo = stable.mountInfo;
 
-// For seasonal events, change these booleans:
-let canBuyNormalFood = true;
-let canDropNormalFood = true;
-let canBuyCandyFood = false;
-let canDropCandyFood = false;
-let canBuyCakeFood = false;
-let canDropCakeFood = false;
+// For seasonal events, change this constant:
+
+const FOOD_SEASON = 'Normal';
 
 api.food = {
   Meat: {
@@ -325,9 +202,9 @@ api.food = {
     textThe: t('foodMeatThe'),
     target: 'Base',
     canBuy () {
-      return canBuyNormalFood;
+      return FOOD_SEASON === 'Normal';
     },
-    canDrop: canDropNormalFood,
+    canDrop: FOOD_SEASON === 'Normal',
   },
   Milk: {
     text: t('foodMilk'),
@@ -335,9 +212,9 @@ api.food = {
     textThe: t('foodMilkThe'),
     target: 'White',
     canBuy () {
-      return canBuyNormalFood;
+      return FOOD_SEASON === 'Normal';
     },
-    canDrop: canDropNormalFood,
+    canDrop: FOOD_SEASON === 'Normal',
   },
   Potatoe: {
     text: t('foodPotatoe'),
@@ -345,9 +222,9 @@ api.food = {
     textThe: t('foodPotatoeThe'),
     target: 'Desert',
     canBuy () {
-      return canBuyNormalFood;
+      return FOOD_SEASON === 'Normal';
     },
-    canDrop: canDropNormalFood,
+    canDrop: FOOD_SEASON === 'Normal',
   },
   Strawberry: {
     text: t('foodStrawberry'),
@@ -355,9 +232,9 @@ api.food = {
     textThe: t('foodStrawberryThe'),
     target: 'Red',
     canBuy () {
-      return canBuyNormalFood;
+      return FOOD_SEASON === 'Normal';
     },
-    canDrop: canDropNormalFood,
+    canDrop: FOOD_SEASON === 'Normal',
   },
   Chocolate: {
     text: t('foodChocolate'),
@@ -365,9 +242,9 @@ api.food = {
     textThe: t('foodChocolateThe'),
     target: 'Shade',
     canBuy () {
-      return canBuyNormalFood;
+      return FOOD_SEASON === 'Normal';
     },
-    canDrop: canDropNormalFood,
+    canDrop: FOOD_SEASON === 'Normal',
   },
   Fish: {
     text: t('foodFish'),
@@ -375,9 +252,9 @@ api.food = {
     textThe: t('foodFishThe'),
     target: 'Skeleton',
     canBuy () {
-      return canBuyNormalFood;
+      return FOOD_SEASON === 'Normal';
     },
-    canDrop: canDropNormalFood,
+    canDrop: FOOD_SEASON === 'Normal',
   },
   RottenMeat: {
     text: t('foodRottenMeat'),
@@ -385,9 +262,9 @@ api.food = {
     textThe: t('foodRottenMeatThe'),
     target: 'Zombie',
     canBuy () {
-      return canBuyNormalFood;
+      return FOOD_SEASON === 'Normal';
     },
-    canDrop: canDropNormalFood,
+    canDrop: FOOD_SEASON === 'Normal',
   },
   CottonCandyPink: {
     text: t('foodCottonCandyPink'),
@@ -395,9 +272,9 @@ api.food = {
     textThe: t('foodCottonCandyPinkThe'),
     target: 'CottonCandyPink',
     canBuy () {
-      return canBuyNormalFood;
+      return FOOD_SEASON === 'Normal';
     },
-    canDrop: canDropNormalFood,
+    canDrop: FOOD_SEASON === 'Normal',
   },
   CottonCandyBlue: {
     text: t('foodCottonCandyBlue'),
@@ -405,9 +282,9 @@ api.food = {
     textThe: t('foodCottonCandyBlueThe'),
     target: 'CottonCandyBlue',
     canBuy () {
-      return canBuyNormalFood;
+      return FOOD_SEASON === 'Normal';
     },
-    canDrop: canDropNormalFood,
+    canDrop: FOOD_SEASON === 'Normal',
   },
   Honey: {
     text: t('foodHoney'),
@@ -415,9 +292,9 @@ api.food = {
     textThe: t('foodHoneyThe'),
     target: 'Golden',
     canBuy () {
-      return canBuyNormalFood;
+      return FOOD_SEASON === 'Normal';
     },
-    canDrop: canDropNormalFood,
+    canDrop: FOOD_SEASON === 'Normal',
   },
   Saddle: {
     canBuy () {
@@ -435,9 +312,9 @@ api.food = {
     textThe: t('foodCakeSkeletonThe'),
     target: 'Skeleton',
     canBuy () {
-      return canBuyCakeFood;
+      return FOOD_SEASON === 'Cake';
     },
-    canDrop: canDropCakeFood,
+    canDrop: FOOD_SEASON === 'Cake',
   },
   Cake_Base: {
     text: t('foodCakeBase'),
@@ -445,9 +322,9 @@ api.food = {
     textThe: t('foodCakeBaseThe'),
     target: 'Base',
     canBuy () {
-      return canBuyCakeFood;
+      return FOOD_SEASON === 'Cake';
     },
-    canDrop: canDropCakeFood,
+    canDrop: FOOD_SEASON === 'Cake',
   },
   Cake_CottonCandyBlue: {
     text: t('foodCakeCottonCandyBlue'),
@@ -455,9 +332,9 @@ api.food = {
     textThe: t('foodCakeCottonCandyBlueThe'),
     target: 'CottonCandyBlue',
     canBuy () {
-      return canBuyCakeFood;
+      return FOOD_SEASON === 'Cake';
     },
-    canDrop: canDropCakeFood,
+    canDrop: FOOD_SEASON === 'Cake',
   },
   Cake_CottonCandyPink: {
     text: t('foodCakeCottonCandyPink'),
@@ -465,9 +342,9 @@ api.food = {
     textThe: t('foodCakeCottonCandyPinkThe'),
     target: 'CottonCandyPink',
     canBuy () {
-      return canBuyCakeFood;
+      return FOOD_SEASON === 'Cake';
     },
-    canDrop: canDropCakeFood,
+    canDrop: FOOD_SEASON === 'Cake',
   },
   Cake_Shade: {
     text: t('foodCakeShade'),
@@ -475,9 +352,9 @@ api.food = {
     textThe: t('foodCakeShadeThe'),
     target: 'Shade',
     canBuy () {
-      return canBuyCakeFood;
+      return FOOD_SEASON === 'Cake';
     },
-    canDrop: canDropCakeFood,
+    canDrop: FOOD_SEASON === 'Cake',
   },
   Cake_White: {
     text: t('foodCakeWhite'),
@@ -485,9 +362,9 @@ api.food = {
     textThe: t('foodCakeWhiteThe'),
     target: 'White',
     canBuy () {
-      return canBuyCakeFood;
+      return FOOD_SEASON === 'Cake';
     },
-    canDrop: canDropCakeFood,
+    canDrop: FOOD_SEASON === 'Cake',
   },
   Cake_Golden: {
     text: t('foodCakeGolden'),
@@ -495,9 +372,9 @@ api.food = {
     textThe: t('foodCakeGoldenThe'),
     target: 'Golden',
     canBuy () {
-      return canBuyCakeFood;
+      return FOOD_SEASON === 'Cake';
     },
-    canDrop: canDropCakeFood,
+    canDrop: FOOD_SEASON === 'Cake',
   },
   Cake_Zombie: {
     text: t('foodCakeZombie'),
@@ -505,9 +382,9 @@ api.food = {
     textThe: t('foodCakeZombieThe'),
     target: 'Zombie',
     canBuy () {
-      return canBuyCakeFood;
+      return FOOD_SEASON === 'Cake';
     },
-    canDrop: canDropCakeFood,
+    canDrop: FOOD_SEASON === 'Cake',
   },
   Cake_Desert: {
     text: t('foodCakeDesert'),
@@ -515,9 +392,9 @@ api.food = {
     textThe: t('foodCakeDesertThe'),
     target: 'Desert',
     canBuy () {
-      return canBuyCakeFood;
+      return FOOD_SEASON === 'Cake';
     },
-    canDrop: canDropCakeFood,
+    canDrop: FOOD_SEASON === 'Cake',
   },
   Cake_Red: {
     text: t('foodCakeRed'),
@@ -525,9 +402,9 @@ api.food = {
     textThe: t('foodCakeRedThe'),
     target: 'Red',
     canBuy () {
-      return canBuyCakeFood;
+      return FOOD_SEASON === 'Cake';
     },
-    canDrop: canDropCakeFood,
+    canDrop: FOOD_SEASON === 'Cake',
   },
   Candy_Skeleton: {
     text: t('foodCandySkeleton'),
@@ -535,9 +412,9 @@ api.food = {
     textThe: t('foodCandySkeletonThe'),
     target: 'Skeleton',
     canBuy () {
-      return canBuyCandyFood;
+      return FOOD_SEASON === 'Candy';
     },
-    canDrop: canDropCandyFood,
+    canDrop: FOOD_SEASON === 'Candy',
   },
   Candy_Base: {
     text: t('foodCandyBase'),
@@ -545,9 +422,9 @@ api.food = {
     textThe: t('foodCandyBaseThe'),
     target: 'Base',
     canBuy () {
-      return canBuyCandyFood;
+      return FOOD_SEASON === 'Candy';
     },
-    canDrop: canDropCandyFood,
+    canDrop: FOOD_SEASON === 'Candy',
   },
   Candy_CottonCandyBlue: {
     text: t('foodCandyCottonCandyBlue'),
@@ -555,9 +432,9 @@ api.food = {
     textThe: t('foodCandyCottonCandyBlueThe'),
     target: 'CottonCandyBlue',
     canBuy () {
-      return canBuyCandyFood;
+      return FOOD_SEASON === 'Candy';
     },
-    canDrop: canDropCandyFood,
+    canDrop: FOOD_SEASON === 'Candy',
   },
   Candy_CottonCandyPink: {
     text: t('foodCandyCottonCandyPink'),
@@ -565,9 +442,9 @@ api.food = {
     textThe: t('foodCandyCottonCandyPinkThe'),
     target: 'CottonCandyPink',
     canBuy () {
-      return canBuyCandyFood;
+      return FOOD_SEASON === 'Candy';
     },
-    canDrop: canDropCandyFood,
+    canDrop: FOOD_SEASON === 'Candy',
   },
   Candy_Shade: {
     text: t('foodCandyShade'),
@@ -575,9 +452,9 @@ api.food = {
     textThe: t('foodCandyShadeThe'),
     target: 'Shade',
     canBuy () {
-      return canBuyCandyFood;
+      return FOOD_SEASON === 'Candy';
     },
-    canDrop: canDropCandyFood,
+    canDrop: FOOD_SEASON === 'Candy',
   },
   Candy_White: {
     text: t('foodCandyWhite'),
@@ -585,9 +462,9 @@ api.food = {
     textThe: t('foodCandyWhiteThe'),
     target: 'White',
     canBuy () {
-      return canBuyCandyFood;
+      return FOOD_SEASON === 'Candy';
     },
-    canDrop: canDropCandyFood,
+    canDrop: FOOD_SEASON === 'Candy',
   },
   Candy_Golden: {
     text: t('foodCandyGolden'),
@@ -595,9 +472,9 @@ api.food = {
     textThe: t('foodCandyGoldenThe'),
     target: 'Golden',
     canBuy () {
-      return canBuyCandyFood;
+      return FOOD_SEASON === 'Candy';
     },
-    canDrop: canDropCandyFood,
+    canDrop: FOOD_SEASON === 'Candy',
   },
   Candy_Zombie: {
     text: t('foodCandyZombie'),
@@ -605,9 +482,9 @@ api.food = {
     textThe: t('foodCandyZombieThe'),
     target: 'Zombie',
     canBuy () {
-      return canBuyCandyFood;
+      return FOOD_SEASON === 'Candy';
     },
-    canDrop: canDropCandyFood,
+    canDrop: FOOD_SEASON === 'Candy',
   },
   Candy_Desert: {
     text: t('foodCandyDesert'),
@@ -615,9 +492,9 @@ api.food = {
     textThe: t('foodCandyDesertThe'),
     target: 'Desert',
     canBuy () {
-      return canBuyCandyFood;
+      return FOOD_SEASON === 'Candy';
     },
-    canDrop: canDropCandyFood,
+    canDrop: FOOD_SEASON === 'Candy',
   },
   Candy_Red: {
     text: t('foodCandyRed'),
@@ -625,24 +502,122 @@ api.food = {
     textThe: t('foodCandyRedThe'),
     target: 'Red',
     canBuy () {
-      return canBuyCandyFood;
+      return FOOD_SEASON === 'Candy';
     },
-    canDrop: canDropCandyFood,
+    canDrop: FOOD_SEASON === 'Candy',
+  },
+  Pie_Skeleton: {
+    text: t('foodPieSkeleton'),
+    textA: t('foodPieSkeletonA'),
+    textThe: t('foodPieSkeletonThe'),
+    target: 'Skeleton',
+    canBuy () {
+      return FOOD_SEASON === 'Pie';
+    },
+    canDrop: FOOD_SEASON === 'Pie',
+  },
+  Pie_Base: {
+    text: t('foodPieBase'),
+    textA: t('foodPieBaseA'),
+    textThe: t('foodPieBaseThe'),
+    target: 'Base',
+    canBuy () {
+      return FOOD_SEASON === 'Pie';
+    },
+    canDrop: FOOD_SEASON === 'Pie',
+  },
+  Pie_CottonCandyBlue: {
+    text: t('foodPieCottonCandyBlue'),
+    textA: t('foodPieCottonCandyBlueA'),
+    textThe: t('foodPieCottonCandyBlueThe'),
+    target: 'CottonCandyBlue',
+    canBuy () {
+      return FOOD_SEASON === 'Pie';
+    },
+    canDrop: FOOD_SEASON === 'Pie',
+  },
+  Pie_CottonCandyPink: {
+    text: t('foodPieCottonCandyPink'),
+    textA: t('foodPieCottonCandyPinkA'),
+    textThe: t('foodPieCottonCandyPinkThe'),
+    target: 'CottonCandyPink',
+    canBuy () {
+      return FOOD_SEASON === 'Pie';
+    },
+    canDrop: FOOD_SEASON === 'Pie',
+  },
+  Pie_Shade: {
+    text: t('foodPieShade'),
+    textA: t('foodPieShadeA'),
+    textThe: t('foodPieShadeThe'),
+    target: 'Shade',
+    canBuy () {
+      return FOOD_SEASON === 'Pie';
+    },
+    canDrop: FOOD_SEASON === 'Pie',
+  },
+  Pie_White: {
+    text: t('foodPieWhite'),
+    textA: t('foodPieWhiteA'),
+    textThe: t('foodPieWhiteThe'),
+    target: 'White',
+    canBuy () {
+      return FOOD_SEASON === 'Pie';
+    },
+    canDrop: FOOD_SEASON === 'Pie',
+  },
+  Pie_Golden: {
+    text: t('foodPieGolden'),
+    textA: t('foodPieGoldenA'),
+    textThe: t('foodPieGoldenThe'),
+    target: 'Golden',
+    canBuy () {
+      return FOOD_SEASON === 'Pie';
+    },
+    canDrop: FOOD_SEASON === 'Pie',
+  },
+  Pie_Zombie: {
+    text: t('foodPieZombie'),
+    textA: t('foodPieZombieA'),
+    textThe: t('foodPieZombieThe'),
+    target: 'Zombie',
+    canBuy () {
+      return FOOD_SEASON === 'Pie';
+    },
+    canDrop: FOOD_SEASON === 'Pie',
+  },
+  Pie_Desert: {
+    text: t('foodPieDesert'),
+    textA: t('foodPieDesertA'),
+    textThe: t('foodPieDesertThe'),
+    target: 'Desert',
+    canBuy () {
+      return FOOD_SEASON === 'Pie';
+    },
+    canDrop: FOOD_SEASON === 'Pie',
+  },
+  Pie_Red: {
+    text: t('foodPieRed'),
+    textA: t('foodPieRedA'),
+    textThe: t('foodPieRedThe'),
+    target: 'Red',
+    canBuy () {
+      return FOOD_SEASON === 'Pie';
+    },
+    canDrop: FOOD_SEASON === 'Pie',
   },
   /* eslint-enable camelcase */
 };
 
-each(api.food, (food, key) => {
-  return defaults(food, {
-    value: 1,
-    key,
-    notes: t('foodNotes'),
-    canBuy () {
-      return false;
-    },
-    canDrop: false,
-  });
-});
+each(api.food, (food, key) => defaults(food, {
+  value: 1,
+  key,
+  notes: t('foodNotes'),
+  canBuy () {
+    return false;
+  },
+  canDrop: false,
+}));
 
 api.appearances = appearances;
 
@@ -659,9 +634,9 @@ api.userDefaults = {
       down: false,
       attribute: 'per',
       tags: [
-        t('defaultTag1'),  // Work
-        t('defaultTag4'),  // School
-        t('defaultTag6'),  // Chores
+        t('defaultTag1'), // Work
+        t('defaultTag4'), // School
+        t('defaultTag6'), // Chores
       ],
     }, {
       type: 'habit',
@@ -671,7 +646,7 @@ api.userDefaults = {
       down: true,
       attribute: 'str',
       tags: [
-        t('defaultTag3'),  // Health + Wellness
+        t('defaultTag3'), // Health + Wellness
       ],
     }, {
       type: 'habit',
@@ -681,8 +656,8 @@ api.userDefaults = {
       down: true,
       attribute: 'str',
       tags: [
-        t('defaultTag2'),  // Exercise
-        t('defaultTag3'),  // Health + Wellness
+        t('defaultTag2'), // Exercise
+        t('defaultTag3'), // Health + Wellness
       ],
     },
   ],
@@ -721,6 +696,7 @@ api.userDefaults = {
     },
   ],
 };
+api.tasksByCategory = tasksByCategory;
 
 api.userDefaultsMobile = {
   habits: [],
@@ -733,3 +709,5 @@ api.userDefaultsMobile = {
 api.faq = faq;
 
 api.loginIncentives = loginIncentives(api);
+
+export default api;

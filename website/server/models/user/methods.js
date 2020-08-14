@@ -1,94 +1,115 @@
 import moment from 'moment';
+import {
+  defaults, map, flatten, flow, compact, uniq, partialRight,
+} from 'lodash';
 import common from '../../../common';
 
-import {
-  chatDefaults,
+import { // eslint-disable-line import/no-cycle
   TAVERN_ID,
   model as Group,
 } from '../group';
 
-import { defaults, map, flatten, flow, compact, uniq, partialRight } from 'lodash';
-import { model as UserNotification } from '../userNotification';
-import schema from './schema';
-import payments from '../../libs/payments/payments';
-import amazonPayments from '../../libs/payments/amazon';
-import stripePayments from '../../libs/payments/stripe';
-import paypalPayments from '../../libs/payments/paypal';
+import {
+  messageDefaults,
+  setUserStyles,
+  inboxModel as Inbox,
+} from '../message';
 
-const daysSince = common.daysSince;
+import { model as UserNotification } from '../userNotification';
+import schema from './schema'; // eslint-disable-line import/no-cycle
+import payments from '../../libs/payments/payments'; // eslint-disable-line import/no-cycle
+import * as inboxLib from '../../libs/inbox'; // eslint-disable-line import/no-cycle
+import amazonPayments from '../../libs/payments/amazon'; // eslint-disable-line import/no-cycle
+import stripePayments from '../../libs/payments/stripe'; // eslint-disable-line import/no-cycle
+import paypalPayments from '../../libs/payments/paypal'; // eslint-disable-line import/no-cycle
+
+const { daysSince } = common;
 
 schema.methods.isSubscribed = function isSubscribed () {
   const now = new Date();
-  const plan = this.purchased.plan;
-  return plan && plan.customerId && (!plan.dateTerminated || moment(plan.dateTerminated).isAfter(now));
+  const { plan } = this.purchased;
+  return plan && plan.customerId
+    && (!plan.dateTerminated || moment(plan.dateTerminated).isAfter(now));
 };
 
 schema.methods.hasNotCancelled = function hasNotCancelled () {
-  let plan = this.purchased.plan;
-  return this.isSubscribed() && !plan.dateTerminated;
+  const { plan } = this.purchased;
+  return Boolean(this.isSubscribed() && !plan.dateTerminated);
+};
+
+schema.methods.hasCancelled = function hasCancelled () {
+  const { plan } = this.purchased;
+  return Boolean(this.isSubscribed() && plan.dateTerminated);
 };
 
 // Get an array of groups ids the user is member of
 schema.methods.getGroups = function getUserGroups () {
-  let userGroups = this.guilds.slice(0); // clone this.guilds so we don't modify the original
+  const userGroups = this.guilds.slice(0); // clone this.guilds so we don't modify the original
   if (this.party._id) userGroups.push(this.party._id);
   userGroups.push(TAVERN_ID);
   return userGroups;
 };
 
-/* eslint-disable no-unused-vars */ // The checks below all get access to sndr and rcvr, but not all use both
+/* eslint-disable no-unused-vars */
+// The checks below all get access to sndr and rcvr, but not all use both
 const INTERACTION_CHECKS = Object.freeze({
   always: [
-    // Revoked chat privileges block all interactions to prevent the evading of harassment protections
+    // Revoked chat privileges block all interactions
+    // to prevent the evading of harassment protections
     // See issue #7971 for some discussion
     (sndr, rcvr) => sndr.flags.chatRevoked && 'chatPrivilegesRevoked',
 
     // Direct user blocks prevent all interactions
     (sndr, rcvr) => rcvr.inbox.blocks.includes(sndr._id) && 'notAuthorizedToSendMessageToThisUser',
-    (sndr, rcvr) => sndr.inbox.blocks.includes(rcvr._id) && 'notAuthorizedToSendMessageToThisUser',
+    (sndr, rcvr) => sndr.inbox.blocks.includes(rcvr._id) && 'blockedToSendToThisUser',
   ],
 
   'send-private-message': [
     // Private messaging has an opt-out, which does not affect other interactions
     (sndr, rcvr) => rcvr.inbox.optOut && 'notAuthorizedToSendMessageToThisUser',
 
-    // We allow a player to message themselves so they can test how PMs work or send their own notes to themselves
+    // We allow a player to message themselves so they can test how PMs work
+    // or send their own notes to themselves
   ],
 
   'transfer-gems': [
     // Unlike private messages, gems can't be sent to oneself
     (sndr, rcvr) => rcvr._id === sndr._id && 'cannotSendGemsToYourself',
   ],
+
+  'group-invitation': [
+    // uses the checks that are in the 'always' array
+  ],
 });
 /* eslint-enable no-unused-vars */
 
-export const KNOWN_INTERACTIONS = Object.freeze(Object.keys(INTERACTION_CHECKS).filter(key => key !== 'always'));
+export const KNOWN_INTERACTIONS = Object.freeze(Object.keys(INTERACTION_CHECKS) // eslint-disable-line import/prefer-default-export, max-len
+  .filter(key => key !== 'always'));
 
 // Get an array of error message keys that would be thrown if the given interaction was attempted
-schema.methods.getObjectionsToInteraction = function getObjectionsToInteraction (interaction, receiver) {
+schema.methods.getObjectionsToInteraction = function getObjectionsToInteraction (interaction, receiver) { // eslint-disable-line max-len
   if (!KNOWN_INTERACTIONS.includes(interaction)) {
     throw new Error(`Unknown kind of interaction: "${interaction}", expected one of ${KNOWN_INTERACTIONS.join(', ')}`);
   }
 
-  let sender = this;
-  let checks = [
+  const sender = this;
+  const checks = [
     INTERACTION_CHECKS.always,
     INTERACTION_CHECKS[interaction],
   ];
 
-  let executeChecks = partialRight(map, (check) => check(sender, receiver));
+  const executeChecks = partialRight(map, check => check(sender, receiver));
 
   return flow(
     flatten,
     executeChecks,
     compact, // Remove passed checks (passed checks return falsy; failed checks return message keys)
-    uniq
+    uniq,
   )(checks);
 };
 
-
 /**
- * Sends a message to a this. Archives a copy in sender's inbox.
+ * Sends a message to a user. Archives a copy in sender's inbox.
  *
  * @param  userToReceiveMessage  The receiver
  * @param  options
@@ -97,15 +118,19 @@ schema.methods.getObjectionsToInteraction = function getObjectionsToInteraction 
  * @return N/A
  */
 schema.methods.sendMessage = async function sendMessage (userToReceiveMessage, options) {
-  let sender = this;
-  let senderMsg = options.senderMsg || options.receiverMsg;
+  const sender = this;
+  const senderMsg = options.senderMsg || options.receiverMsg;
   // whether to save users after sending the message, defaults to true
-  let saveUsers = options.save === false ? false : true;
+  const saveUsers = options.save !== false;
 
-  common.refPush(userToReceiveMessage.inbox.messages, chatDefaults(options.receiverMsg, sender));
-  userToReceiveMessage.inbox.newMessages++;
-  userToReceiveMessage._v++;
-  userToReceiveMessage.markModified('inbox.messages');
+  const newReceiverMessage = new Inbox({
+    ownerId: userToReceiveMessage._id,
+  });
+  Object.assign(newReceiverMessage, messageDefaults(options.receiverMsg, sender));
+  setUserStyles(newReceiverMessage, sender);
+
+  userToReceiveMessage.inbox.newMessages += 1;
+  userToReceiveMessage._v += 1;
 
   /* @TODO disabled until mobile is ready
 
@@ -129,19 +154,40 @@ schema.methods.sendMessage = async function sendMessage (userToReceiveMessage, o
 
   */
 
-  common.refPush(sender.inbox.messages, defaults({sent: true}, chatDefaults(senderMsg, userToReceiveMessage)));
-  sender.markModified('inbox.messages');
+  const sendingToYourself = userToReceiveMessage._id === sender._id;
+
+  // Do not add the message twice when sending it to yourself
+  let newSenderMessage;
+
+  if (!sendingToYourself) {
+    newSenderMessage = new Inbox({
+      sent: true,
+      ownerId: sender._id,
+    });
+    Object.assign(newSenderMessage, messageDefaults(senderMsg, userToReceiveMessage));
+    setUserStyles(newSenderMessage, sender);
+  }
+
+  const promises = [newReceiverMessage.save()];
+  if (!sendingToYourself) promises.push(newSenderMessage.save());
 
   if (saveUsers) {
-    await Promise.all([userToReceiveMessage.save(), sender.save()]);
+    promises.push(sender.save());
+    if (!sendingToYourself) promises.push(userToReceiveMessage.save());
   }
+
+  await Promise.all(promises);
+
+  return sendingToYourself ? newReceiverMessage : newSenderMessage;
 };
 
 /**
- * Creates a notification based on the input parameters and adds it to the local user notifications array.
+ * Creates a notification based on the input parameters and adds
+ * it to the local user notifications array.
  * This does not save the notification to the database or interact with the database in any way.
  *
- * @param  type  The type of notification to add to the this. Possible values are defined in the UserNotificaiton Schema
+ * @param  type  The type of notification to add to the this.
+ * Possible values are defined in the UserNotificaiton Schema
  * @param  data  The data to add to the notification
  * @param  seen  If the notification should be marked as seen
  */
@@ -154,24 +200,86 @@ schema.methods.addNotification = function addUserNotification (type, data = {}, 
 };
 
 /**
- * Creates a notification based on the type and data input parameters and saves that new notification
- * to the database directly using an update statement. The local copy of these users are not updated by
- * this operation. Use this function when you want to add a notification to a user(s), but do not have
+ * Creates a notification based on the type and data input parameters
+  and saves that new notification
+ * to the database directly using an update statement.
+ * The local copy of these users are not updated by
+ * this operation. Use this function when you want to add a notification to a user(s),
+ * but do not have
  * the user document(s) opened.
  *
  * @param  query A Mongoose query defining the users to add the notification to.
- * @param  type  The type of notification to add to the this. Possible values are defined in the UserNotificaiton Schema
+ * @param  type  The type of notification to add to the this.
+ * Possible values are defined in the UserNotificaiton Schema
  * @param  data  The data to add to the notification
  */
-schema.statics.pushNotification = async function pushNotification (query, type, data = {}, seen = false) {
-  let newNotification = new UserNotification({type, data, seen});
+schema.statics.pushNotification = async function pushNotification (
+  query, type, data = {}, seen = false,
+) {
+  const newNotification = new UserNotification({ type, data, seen });
 
-  let validationResult = newNotification.validateSync();
+  const validationResult = newNotification.validateSync();
   if (validationResult) {
     throw validationResult;
   }
 
-  await this.update(query, {$push: {notifications: newNotification.toObject()}}, {multi: true}).exec();
+  await this.update(
+    query,
+    { $push: { notifications: newNotification.toObject() } },
+    { multi: true },
+  ).exec();
+};
+
+/**
+ * Adds an achievement and a related notification to the user.
+ *
+ * @param  achievement The key identifying the achievement to award.
+ */
+schema.methods.addAchievement = function addAchievement (achievement) {
+  const achievementData = common.content.achievements[achievement];
+  if (!achievementData) throw new Error(`Achievement ${achievement} does not exist.`);
+
+  this.achievements[achievement] = true;
+
+  this.notifications.push({
+    type: 'ACHIEVEMENT',
+    data: {
+      achievement,
+    },
+    seen: false,
+  });
+};
+
+/**
+ * Adds an achievement and a related notification to the user, saving it directly to the database
+ * To be used when the user object is not loaded or we don't want to use `user.save`
+ *
+ * @param  query A Mongoose query defining the users to add the notification to.
+ * @param  achievement The key identifying the achievement to award.
+ */
+schema.statics.addAchievementUpdate = async function addAchievementUpdate (query, achievement) {
+  const achievementData = common.content.achievements[achievement];
+  if (!achievementData) throw new Error(`Achievement ${achievement} does not exist.`);
+
+  const newNotification = new UserNotification({
+    type: 'ACHIEVEMENT',
+    data: {
+      achievement,
+    },
+    seen: false,
+  });
+
+  const validationResult = newNotification.validateSync();
+  if (validationResult) throw validationResult;
+
+  await this.update(
+    query,
+    {
+      $push: { notifications: newNotification.toObject() },
+      $set: { [`achievements.${achievement}`]: true },
+    },
+    { multi: true },
+  ).exec();
 };
 
 // Static method to add/remove properties to a JSON User object,
@@ -181,12 +289,18 @@ schema.statics.transformJSONUser = function transformJSONUser (jsonUser, addComp
   // Add id property
   jsonUser.id = jsonUser._id;
 
+  // Remove username if not verified
+  if (!jsonUser.flags.verifiedUsername) jsonUser.auth.local.username = null;
+
   if (addComputedStats) this.addComputedStatsToJSONObj(jsonUser.stats, jsonUser);
 };
 
 // Add stats.toNextLevel, stats.maxMP and stats.maxHealth
 // to a JSONified User stats object
-schema.statics.addComputedStatsToJSONObj = function addComputedStatsToUserJSONObj (userStatsJSON, user) {
+schema.statics.addComputedStatsToJSONObj = function addComputedStatsToUserJSONObj (
+  userStatsJSON,
+  user,
+) {
   // NOTE: if an item is manually added to this.stats then
   // common/fns/predictableRandom must be tweaked so the new item is not considered.
   // Otherwise the client will have it while the server won't and the results will be different.
@@ -208,25 +322,33 @@ schema.statics.addComputedStatsToJSONObj = function addComputedStatsToUserJSONOb
  *
  * @return a Promise from api.cancelSubscription()
  */
-// @TODO: There is currently a three way relation between the user, payment methods and the payment helper
-// This creates some odd Dependency Injection issues. To counter that, we use the user as the third layer
-// To negotiate between the payment providers and the payment helper (which probably has too many responsiblities)
-// In summary, currently is is best practice to use this method to cancel a user subscription, rather than calling the
+// @TODO: There is currently a three way relation between the user,
+// payment methods and the payment helper
+// This creates some odd Dependency Injection issues. To counter that,
+// we use the user as the third layer
+// To negotiate between the payment providers and the payment helper
+// (which probably has too many responsibilities)
+// In summary, currently is is best practice to use this method to cancel a user subscription,
+// rather than calling the
 // payment helper.
 schema.methods.cancelSubscription = async function cancelSubscription (options = {}) {
-  let plan = this.purchased.plan;
+  const { plan } = this.purchased;
 
   options.user = this;
   if (plan.paymentMethod === amazonPayments.constants.PAYMENT_METHOD) {
-    return await amazonPayments.cancelSubscription(options);
-  } else if (plan.paymentMethod === stripePayments.constants.PAYMENT_METHOD) {
-    return await stripePayments.cancelSubscription(options);
-  } else if (plan.paymentMethod === paypalPayments.constants.PAYMENT_METHOD) {
-    return await paypalPayments.subscribeCancel(options);
+    return amazonPayments.cancelSubscription(options);
+  } if (plan.paymentMethod === stripePayments.constants.PAYMENT_METHOD) {
+    return stripePayments.cancelSubscription(options);
+  } if (plan.paymentMethod === paypalPayments.constants.PAYMENT_METHOD) {
+    return paypalPayments.subscribeCancel(options);
   }
   // Android and iOS subscriptions cannot be cancelled by Habitica.
 
-  return await payments.cancelSubscription(options);
+  return payments.cancelSubscription(options);
+};
+
+schema.methods.getUtcOffset = function getUtcOffset () {
+  return common.fns.getUtcOffset(this);
 };
 
 schema.methods.daysUserHasMissed = function daysUserHasMissed (now, req = {}) {
@@ -234,41 +356,46 @@ schema.methods.daysUserHasMissed = function daysUserHasMissed (now, req = {}) {
   // cron can be triggered twice in one day, so we check for that and use
   // both timezones to work out if cron should run.
   // CDS = Custom Day Start time.
-  let timezoneOffsetFromUserPrefs = this.preferences.timezoneOffset;
-  let timezoneOffsetAtLastCron = isFinite(this.preferences.timezoneOffsetAtLastCron) ? this.preferences.timezoneOffsetAtLastCron : timezoneOffsetFromUserPrefs;
-  let timezoneOffsetFromBrowser = typeof req.header === 'function' && Number(req.header('x-user-timezoneoffset'));
-  timezoneOffsetFromBrowser = isFinite(timezoneOffsetFromBrowser) ? timezoneOffsetFromBrowser : timezoneOffsetFromUserPrefs;
+  let timezoneUtcOffsetFromUserPrefs = this.getUtcOffset();
+  const timezoneUtcOffsetAtLastCron = Number.isFinite(this.preferences.timezoneOffsetAtLastCron)
+    ? -this.preferences.timezoneOffsetAtLastCron
+    : timezoneUtcOffsetFromUserPrefs;
+
+  let timezoneUtcOffsetFromBrowser = typeof req.header === 'function' && -Number(req.header('x-user-timezoneoffset'));
+  timezoneUtcOffsetFromBrowser = Number.isFinite(timezoneUtcOffsetFromBrowser)
+    ? timezoneUtcOffsetFromBrowser
+    : timezoneUtcOffsetFromUserPrefs;
   // NB: All timezone offsets can be 0, so can't use `... || ...` to apply non-zero defaults
 
-  if (timezoneOffsetFromBrowser !== timezoneOffsetFromUserPrefs) {
+  if (timezoneUtcOffsetFromBrowser !== timezoneUtcOffsetFromUserPrefs) {
     // The user's browser has just told Habitica that the user's timezone has
     // changed so store and use the new zone.
-    this.preferences.timezoneOffset = timezoneOffsetFromBrowser;
-    timezoneOffsetFromUserPrefs = timezoneOffsetFromBrowser;
+    this.preferences.timezoneOffset = -timezoneUtcOffsetFromBrowser;
+    timezoneUtcOffsetFromUserPrefs = timezoneUtcOffsetFromBrowser;
   }
 
   // How many days have we missed using the user's current timezone:
-  let daysMissed = daysSince(this.lastCron, defaults({now}, this.preferences));
+  let daysMissed = daysSince(this.lastCron, defaults({ now }, this.preferences));
 
-  if (timezoneOffsetAtLastCron !== timezoneOffsetFromUserPrefs) {
+  if (timezoneUtcOffsetAtLastCron !== timezoneUtcOffsetFromUserPrefs) {
     // Give the user extra time based on the difference in timezones
-    if (timezoneOffsetAtLastCron < timezoneOffsetFromUserPrefs) {
-      const differenceBetweenTimezonesInMinutes = timezoneOffsetFromUserPrefs - timezoneOffsetAtLastCron;
-      now = moment(now).subtract(differenceBetweenTimezonesInMinutes, 'minutes');
+    if (timezoneUtcOffsetAtLastCron > timezoneUtcOffsetFromUserPrefs) {
+      const differenceBetweenTimezonesInMinutes = timezoneUtcOffsetAtLastCron - timezoneUtcOffsetFromUserPrefs; // eslint-disable-line max-len
+      now = moment(now).subtract(differenceBetweenTimezonesInMinutes, 'minutes'); // eslint-disable-line no-param-reassign, max-len
     }
 
     // Since cron last ran, the user's timezone has changed.
     // How many days have we missed using the old timezone:
-    let daysMissedNewZone = daysMissed;
-    let daysMissedOldZone = daysSince(this.lastCron, defaults({
+    const daysMissedNewZone = daysMissed;
+    const daysMissedOldZone = daysSince(this.lastCron, defaults({
       now,
-      timezoneOffsetOverride: timezoneOffsetAtLastCron,
+      timezoneUtcOffsetOverride: timezoneUtcOffsetAtLastCron,
     }, this.preferences));
 
-    if (timezoneOffsetAtLastCron < timezoneOffsetFromUserPrefs) {
+    if (timezoneUtcOffsetAtLastCron > timezoneUtcOffsetFromUserPrefs) {
       // The timezone change was in the unsafe direction.
-      // E.g., timezone changes from UTC+1 (offset -60) to UTC+0 (offset 0).
-      //    or timezone changes from UTC-4 (offset 240) to UTC-5 (offset 300).
+      // E.g., timezone changes from UTC+1 (utcOffset 60) to UTC+0 (offset 0).
+      //    or timezone changes from UTC-4 (utcOffset -240) to UTC-5 (utcOffset -300).
       // Local time changed from, for example, 03:00 to 02:00.
 
       if (daysMissedOldZone > 0 && daysMissedNewZone > 0) {
@@ -281,7 +408,10 @@ schema.methods.daysUserHasMissed = function daysUserHasMissed (now, req = {}) {
         // This should be impossible for this direction of timezone change, but
         // just in case I'm wrong...
         // TODO
-        // console.log("zone has changed - old zone says run cron, NEW zone says no - stop cron now only -- SHOULD NOT HAVE GOT TO HERE", timezoneOffsetAtLastCron, timezoneOffsetFromUserPrefs, now); // used in production for confirming this never happens
+        // console.log("zone has changed - old zone says run cron,
+        // NEW zone says no - stop cron now only -- SHOULD NOT HAVE GOT TO HERE",
+        // timezoneOffsetAtLastCron, timezoneOffsetFromUserPrefs, now);
+        // used in production for confirming this never happens
       } else if (daysMissedNewZone > 0) {
         // The old timezone says that cron should NOT run -- i.e., cron has
         // already run today, from the old timezone's point of view.
@@ -294,27 +424,34 @@ schema.methods.daysUserHasMissed = function daysUserHasMissed (now, req = {}) {
         // timezone interprets as being in today.
 
         daysMissed = 0; // prevent cron running now
-        let timezoneOffsetDiff = timezoneOffsetAtLastCron - timezoneOffsetFromUserPrefs;
-        // e.g., for dangerous zone change: 240 - 300 = -60 or  -660 - -600 = -60
+        const timezoneOffsetDiff = timezoneUtcOffsetFromUserPrefs - timezoneUtcOffsetAtLastCron;
+        // e.g., for dangerous zone change: -300 - -240 = -60 or 600 - 660= -60
 
         this.lastCron = moment(this.lastCron).subtract(timezoneOffsetDiff, 'minutes');
-        // NB: We don't change this.auth.timestamps.loggedin so that will still record the time that the previous cron actually ran.
+        // NB: We don't change this.auth.timestamps.loggedin so that will still record
+        // the time that the previous cron actually ran.
         // From now on we can ignore the old timezone:
-        this.preferences.timezoneOffsetAtLastCron = timezoneOffsetFromUserPrefs;
+        // This is still timezoneOffset for backwards compatibility reasons.
+        this.preferences.timezoneOffsetAtLastCron = -timezoneUtcOffsetAtLastCron;
       } else {
         // Both old and new timezones indicate that cron should
         // NOT run.
         daysMissed = 0; // prevent cron running now
       }
-    } else if (timezoneOffsetAtLastCron > timezoneOffsetFromUserPrefs) {
+    } else if (timezoneUtcOffsetAtLastCron < timezoneUtcOffsetFromUserPrefs) {
       daysMissed = daysMissedNewZone;
-      // TODO: Either confirm that there is nothing that could possibly go wrong here and remove the need for this else branch, or fix stuff.
-      // There are probably situations where the Dailies do not reset early enough for a user who was expecting the zone change and wants to use all their Dailies immediately in the new zone;
-      // if so, we should provide an option for easy reset of Dailies (can't be automatic because there will be other situations where the user was not prepared).
+      // TODO: Either confirm that there is nothing that could possibly go wrong
+      // here and remove the need for this else branch, or fix stuff.
+      // There are probably situations where the Dailies do not reset early enough
+      // for a user who was expecting the zone change and wants to use all their Dailies
+      // immediately in the new zone;
+      // if so, we should provide an option for easy reset of Dailies
+      // (can't be automatic because there will be other situations where
+      // the user was not prepared).
     }
   }
 
-  return {daysMissed, timezoneOffsetFromUserPrefs};
+  return { daysMissed, timezoneUtcOffsetFromUserPrefs };
 };
 
 async function getUserGroupData (user) {
@@ -322,7 +459,7 @@ async function getUserGroupData (user) {
 
   const groups = await Group
     .find({
-      _id: {$in: userGroups},
+      _id: { $in: userGroups },
     })
     .select('leaderOnly leader purchased')
     .exec();
@@ -335,7 +472,7 @@ async function getUserGroupData (user) {
 // its the group leader
 schema.methods.canGetGems = async function canObtainGems () {
   const user = this;
-  const plan = user.purchased.plan;
+  const { plan } = user.purchased;
 
   if (!user.isSubscribed() || plan.customerId !== payments.constants.GROUP_PLAN_CUSTOMER_ID) {
     return true;
@@ -343,19 +480,37 @@ schema.methods.canGetGems = async function canObtainGems () {
 
   const groups = await getUserGroupData(user);
 
-  return groups.every(g => {
-    return !g.isSubscribed() || g.leader === user._id || g.leaderOnly.getGems !== true;
-  });
+  return groups
+    .every(g => !g.hasActiveGroupPlan() || g.leader === user._id || g.leaderOnly.getGems !== true);
 };
 
 schema.methods.isMemberOfGroupPlan = async function isMemberOfGroupPlan () {
   const groups = await getUserGroupData(this);
 
-  return groups.every(g => {
-    return g.isSubscribed();
-  });
+  return groups.some(g => g.hasActiveGroupPlan());
 };
 
 schema.methods.isAdmin = function isAdmin () {
   return this.contributor && this.contributor.admin;
+};
+
+// When converting to json add inbox messages from the Inbox collection
+// for backward compatibility in API v3.
+schema.methods.toJSONWithInbox = async function userToJSONWithInbox () {
+  const user = this;
+  const toJSON = user.toJSON();
+
+  if (toJSON.inbox) {
+    toJSON.inbox.messages = await inboxLib.getUserInbox(user, {
+      asArray: false,
+    });
+  }
+
+  return toJSON;
+};
+
+schema.methods.getSecretData = function getSecretData () {
+  const user = this;
+
+  return user.secret;
 };

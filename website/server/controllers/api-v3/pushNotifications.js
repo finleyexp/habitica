@@ -1,10 +1,10 @@
 import { authWithHeaders } from '../../middlewares/auth';
 import {
-  NotAuthorized,
   NotFound,
 } from '../../libs/errors';
+import { model as PushDevice } from '../../models/pushDevice';
 
-let api = {};
+const api = {};
 
 /**
  * @apiIgnore
@@ -21,32 +21,37 @@ let api = {};
 api.addPushDevice = {
   method: 'POST',
   url: '/user/push-devices',
-  middlewares: [authWithHeaders({
-    userFieldsToExclude: ['inbox'],
-  })],
+  middlewares: [authWithHeaders()],
   async handler (req, res) {
-    let user = res.locals.user;
+    const { user } = res.locals;
 
     req.checkBody('regId', res.t('regIdRequired')).notEmpty();
     req.checkBody('type', res.t('typeRequired')).notEmpty().isIn(['ios', 'android']);
 
-    let validationErrors = req.validationErrors();
+    const validationErrors = req.validationErrors();
     if (validationErrors) throw validationErrors;
 
-    let pushDevices = user.pushDevices;
+    const { pushDevices } = user;
 
-    let item = {
+    const item = {
       regId: req.body.regId,
       type: req.body.type,
     };
 
+    // When adding a duplicate push device, fail silently instead of throwing an error
     if (pushDevices.find(device => device.regId === item.regId)) {
-      throw new NotAuthorized(res.t('pushDeviceAlreadyAdded'));
+      res.respond(200, user.pushDevices, res.t('pushDeviceAdded'));
+      return;
     }
 
-    pushDevices.push(item);
+    // Concurrency safe update
+    const pushDevice = (new PushDevice(item)).toJSON(); // Create a mongo doc
+    await user.update({
+      $push: { pushDevices: pushDevice },
+    }).exec();
 
-    await user.save();
+    // Update the response
+    user.pushDevices.push(pushDevice);
 
     res.respond(200, user.pushDevices, res.t('pushDeviceAdded'));
   },
@@ -66,32 +71,34 @@ api.addPushDevice = {
 api.removePushDevice = {
   method: 'DELETE',
   url: '/user/push-devices/:regId',
-  middlewares: [authWithHeaders({
-    userFieldsToExclude: ['inbox'],
-  })],
+  middlewares: [authWithHeaders()],
   async handler (req, res) {
-    let user = res.locals.user;
+    const { user } = res.locals;
 
     req.checkParams('regId', res.t('regIdRequired')).notEmpty();
-    let validationErrors = req.validationErrors();
+
+    const validationErrors = req.validationErrors();
     if (validationErrors) throw validationErrors;
-    let regId = req.params.regId;
 
-    let pushDevices = user.pushDevices;
+    const { regId } = req.params;
 
-    let indexOfPushDevice = pushDevices.findIndex((element) => {
-      return element.regId === regId;
-    });
+    const { pushDevices } = user;
+
+    const indexOfPushDevice = pushDevices.findIndex(element => element.regId === regId);
 
     if (indexOfPushDevice === -1) {
       throw new NotFound(res.t('pushDeviceNotFound'));
     }
 
+    // Concurrency safe update
+    const pullQuery = { $pull: { pushDevices: { regId } } };
+    await user.update(pullQuery).exec();
+
+    // Update the response
     pushDevices.splice(indexOfPushDevice, 1);
-    await user.save();
 
     res.respond(200, user.pushDevices, res.t('pushDeviceRemoved'));
   },
 };
 
-module.exports = api;
+export default api;

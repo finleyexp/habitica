@@ -1,21 +1,23 @@
 import { v4 as uuid } from 'uuid';
 import defaults from 'lodash/defaults';
 import moment from 'moment';
+import getUtcOffset from '../fns/getUtcOffset';
 
-// Even though Mongoose handles task defaults, we want to make sure defaults are set on the client-side before
+// Even though Mongoose handles task defaults,
+// we want to make sure defaults are set on the client-side before
 // sending up to the server for performance
 
 // TODO move to client code?
 
 const tasksTypes = ['habit', 'daily', 'todo', 'reward'];
 
-module.exports = function taskDefaults (task = {}) {
+export default function taskDefaults (task, user) {
   if (!task.type || tasksTypes.indexOf(task.type) === -1) {
     task.type = 'habit';
   }
 
-  let defaultId = uuid();
-  let defaultTaskObj = {
+  const defaultId = uuid();
+  const defaultTaskObj = {
     _id: defaultId,
     text: task._id || defaultId,
     notes: '',
@@ -65,6 +67,14 @@ module.exports = function taskDefaults (task = {}) {
   }
 
   if (task.type === 'daily') {
+    const now = moment().utcOffset(getUtcOffset(user));
+    const startOfDay = now.clone().startOf('day');
+    const startOfDayWithCDSTime = startOfDay
+      .clone()
+      .add({
+        hours: user.preferences.dayStart,
+      });
+
     defaults(task, {
       streak: 0,
       repeat: {
@@ -76,7 +86,10 @@ module.exports = function taskDefaults (task = {}) {
         s: true,
         su: true,
       },
-      startDate: moment().startOf('day').toDate(),
+      // If cron will happen today, start the daily yesterday
+      startDate: startOfDayWithCDSTime.isAfter(now)
+        ? startOfDay.clone().subtract(1, 'day').toDate()
+        : startOfDay.toDate(),
       everyX: 1,
       frequency: 'weekly',
       daysOfMonth: [],
@@ -86,4 +99,4 @@ module.exports = function taskDefaults (task = {}) {
   }
 
   return task;
-};
+}

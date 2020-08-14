@@ -1,19 +1,21 @@
-import { model as User } from '../../../../website/server/models/user';
-import requireAgain from 'require-again';
-import pushNotify from 'push-notify';
+import apn from 'apn/mock';
+import _ from 'lodash';
 import nconf from 'nconf';
 import gcmLib from 'node-gcm'; // works with FCM notifications too
+import { model as User } from '../../../../website/server/models/user';
+import {
+  sendNotification as sendPushNotification,
+  MAX_MESSAGE_LENGTH,
+} from '../../../../website/server/libs/pushNotifications';
 
 describe('pushNotifications', () => {
   let user;
-  let sendPushNotification;
-  let pathToPushNotifications = '../../../../website/server/libs/pushNotifications';
   let fcmSendSpy;
   let apnSendSpy;
 
-  let identifier = 'identifier';
-  let title = 'title';
-  let message = 'message';
+  const identifier = 'identifier';
+  const title = 'title';
+  const message = 'message';
 
   beforeEach(() => {
     user = new User();
@@ -24,12 +26,10 @@ describe('pushNotifications', () => {
 
     sandbox.stub(gcmLib.Sender.prototype, 'send').callsFake(fcmSendSpy);
 
-    sandbox.stub(pushNotify, 'apn').returns({
+    sandbox.stub(apn.Provider.prototype, 'send').returns({
       on: () => null,
       send: apnSendSpy,
     });
-
-    sendPushNotification = requireAgain(pathToPushNotifications).sendNotification;
   });
 
   afterEach(() => {
@@ -86,6 +86,67 @@ describe('pushNotifications', () => {
     expect(apnSendSpy).to.not.have.been.called;
   });
 
+  it('cuts the message to 300 chars', () => {
+    const longMessage = `12345 12345 12345 12345 12345 12345 12345
+      12345 12345 12345 12345 12345 12345 12345 12345 12345 12345
+      12345 12345 12345 12345 12345 12345 12345 12345 12345 12345
+      12345 12345 12345 12345 12345 12345 12345 12345 12345 12345
+      12345 12345 12345 12345 12345 12345 12345 12345 12345 12345
+      12345 12345 12345 12345 12345 12345 12345 12345 12345 12345
+      12345 12345 12345 12345 12345 12345 12345 12345 12345 12345
+      12345 12345 12345 12345 12345 12345 12345 12345 12345 12345
+      12345 12345 12345 12345 12345 12345 12345 12345 12345 12345
+      12345 12345 12345 12345 12345 12345 12345 12345 12345 12345
+      12345 12345 12345 12345 12345 12345 12345 12345 12345 12345`;
+
+    expect(longMessage.length > MAX_MESSAGE_LENGTH).to.equal(true);
+
+    const details = {
+      identifier,
+      title,
+      message: longMessage,
+      payload: {
+        message: longMessage,
+      },
+    };
+
+    sendPushNotification(user, details);
+
+    expect(details.message).to.equal(_.truncate(longMessage, { length: MAX_MESSAGE_LENGTH }));
+    expect(details.payload.message)
+      .to.equal(_.truncate(longMessage, { length: MAX_MESSAGE_LENGTH }));
+
+    expect(details.message.length).to.equal(MAX_MESSAGE_LENGTH);
+    expect(details.payload.message.length).to.equal(MAX_MESSAGE_LENGTH);
+  });
+
+  it('cuts the message to 300 chars (no payload)', () => {
+    const longMessage = `12345 12345 12345 12345 12345 12345 12345
+      12345 12345 12345 12345 12345 12345 12345 12345 12345 12345
+      12345 12345 12345 12345 12345 12345 12345 12345 12345 12345
+      12345 12345 12345 12345 12345 12345 12345 12345 12345 12345
+      12345 12345 12345 12345 12345 12345 12345 12345 12345 12345
+      12345 12345 12345 12345 12345 12345 12345 12345 12345 12345
+      12345 12345 12345 12345 12345 12345 12345 12345 12345 12345
+      12345 12345 12345 12345 12345 12345 12345 12345 12345 12345
+      12345 12345 12345 12345 12345 12345 12345 12345 12345 12345
+      12345 12345 12345 12345 12345 12345 12345 12345 12345 12345
+      12345 12345 12345 12345 12345 12345 12345 12345 12345 12345`;
+
+    expect(longMessage.length > MAX_MESSAGE_LENGTH).to.equal(true);
+
+    const details = {
+      identifier,
+      title,
+      message: longMessage,
+    };
+
+    sendPushNotification(user, details);
+
+    expect(details.message).to.equal(_.truncate(longMessage, { length: MAX_MESSAGE_LENGTH }));
+    expect(details.message.length).to.equal(MAX_MESSAGE_LENGTH);
+  });
+
   // TODO disabled because APN relies on a Promise
   xit('uses APN for iOS devices', () => {
     user.pushDevices.push({
@@ -93,7 +154,7 @@ describe('pushNotifications', () => {
       regId: '123',
     });
 
-    let details = {
+    const details = {
       identifier,
       title,
       message,
@@ -104,10 +165,7 @@ describe('pushNotifications', () => {
       },
     };
 
-    sendPushNotification(user, details);
-    expect(apnSendSpy).to.have.been.calledOnce;
-    expect(apnSendSpy).to.have.been.calledWithMatch({
-      token: '123',
+    const expectedNotification = new apn.Notification({
       alert: message,
       sound: 'default',
       category: 'fun',
@@ -117,6 +175,10 @@ describe('pushNotifications', () => {
         b: true,
       },
     });
+
+    sendPushNotification(user, details);
+    expect(apnSendSpy).to.have.been.calledOnce;
+    expect(apnSendSpy).to.have.been.calledWithMatch(expectedNotification, '123');
     expect(fcmSendSpy).to.not.have.been.called;
   });
 });

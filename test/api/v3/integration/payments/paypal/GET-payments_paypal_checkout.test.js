@@ -4,7 +4,7 @@ import {
 import paypalPayments from '../../../../../../website/server/libs/payments/paypal';
 
 describe('payments : paypal #checkout', () => {
-  let endpoint = '/paypal/checkout';
+  const endpoint = '/paypal/checkout';
   let user;
 
   beforeEach(async () => {
@@ -15,7 +15,7 @@ describe('payments : paypal #checkout', () => {
     let checkoutStub;
 
     beforeEach(async () => {
-      checkoutStub = sinon.stub(paypalPayments, 'checkout').returnsPromise().resolves('/');
+      checkoutStub = sinon.stub(paypalPayments, 'checkout').resolves('/');
     });
 
     afterEach(() => {

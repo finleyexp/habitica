@@ -1,4 +1,5 @@
 /* eslint-disable camelcase */
+import { defaultsDeep } from 'lodash';
 import {
   generateUser,
 } from '../../../helpers/common.helper';
@@ -12,10 +13,14 @@ import errorMessage from '../../../../website/common/script/libs/errorMessage';
 
 describe('shared.ops.buy', () => {
   let user;
-  let analytics = {track () {}};
+  const analytics = { track () {} };
 
   beforeEach(() => {
     user = generateUser({
+      stats: { gp: 200 },
+    });
+
+    defaultsDeep(user, {
       items: {
         gear: {
           owned: {
@@ -26,7 +31,6 @@ describe('shared.ops.buy', () => {
           },
         },
       },
-      stats: { gp: 200 },
     });
 
     sinon.stub(analytics, 'track');
@@ -36,7 +40,7 @@ describe('shared.ops.buy', () => {
     analytics.track.restore();
   });
 
-  it('returns error when key is not provided', (done) => {
+  it('returns error when key is not provided', done => {
     try {
       buy(user);
     } catch (err) {
@@ -48,7 +52,7 @@ describe('shared.ops.buy', () => {
 
   it('recovers 15 hp', () => {
     user.stats.hp = 30;
-    buy(user, {params: {key: 'potion'}}, analytics);
+    buy(user, { params: { key: 'potion' } }, analytics);
     expect(user.stats.hp).to.eql(45);
 
     expect(analytics.track).to.be.calledOnce;
@@ -57,7 +61,7 @@ describe('shared.ops.buy', () => {
   it('adds equipment to inventory', () => {
     user.stats.gp = 31;
 
-    buy(user, {params: {key: 'armor_warrior_1'}});
+    buy(user, { params: { key: 'armor_warrior_1' } });
 
     expect(user.items.gear.owned).to.eql({
       weapon_warrior_0: true,
@@ -76,6 +80,13 @@ describe('shared.ops.buy', () => {
       headAccessory_special_redHeadband: true,
       headAccessory_special_whiteHeadband: true,
       headAccessory_special_yellowHeadband: true,
+      eyewear_special_blackHalfMoon: true,
+      eyewear_special_blueHalfMoon: true,
+      eyewear_special_greenHalfMoon: true,
+      eyewear_special_pinkHalfMoon: true,
+      eyewear_special_redHalfMoon: true,
+      eyewear_special_whiteHalfMoon: true,
+      eyewear_special_yellowHalfMoon: true,
     });
   });
 
@@ -107,15 +118,15 @@ describe('shared.ops.buy', () => {
       type: 'quest',
     });
 
-    expect(user.items.quests).to.eql({dilatoryDistress1: 1});
+    expect(user.items.quests).to.eql({ dilatoryDistress1: 1 });
     expect(user.stats.gp).to.equal(5);
   });
 
   it('buys a special item', () => {
     user.stats.gp = 11;
-    let item = content.special.thankyou;
+    const item = content.special.thankyou;
 
-    let [data, message] = buy(user, {
+    const [data, message] = buy(user, {
       params: {
         key: 'thankyou',
       },
@@ -135,7 +146,55 @@ describe('shared.ops.buy', () => {
 
   it('allows for bulk purchases', () => {
     user.stats.hp = 30;
-    buy(user, {params: {key: 'potion'}, quantity: 2});
+    buy(user, { params: { key: 'potion' }, quantity: 2 });
     expect(user.stats.hp).to.eql(50);
+  });
+
+  it('errors if user supplies a non-numeric quantity', done => {
+    try {
+      buy(user, {
+        params: {
+          key: 'dilatoryDistress1',
+        },
+        type: 'quest',
+        quantity: 'bogle',
+      });
+    } catch (err) {
+      expect(err).to.be.an.instanceof(BadRequest);
+      expect(err.message).to.equal(errorMessage('invalidQuantity'));
+      done();
+    }
+  });
+
+  it('errors if user supplies a negative quantity', done => {
+    try {
+      buy(user, {
+        params: {
+          key: 'dilatoryDistress1',
+        },
+        type: 'quest',
+        quantity: -3,
+      });
+    } catch (err) {
+      expect(err).to.be.an.instanceof(BadRequest);
+      expect(err.message).to.equal(errorMessage('invalidQuantity'));
+      done();
+    }
+  });
+
+  it('errors if user supplies a decimal quantity', done => {
+    try {
+      buy(user, {
+        params: {
+          key: 'dilatoryDistress1',
+        },
+        type: 'quest',
+        quantity: 1.83,
+      });
+    } catch (err) {
+      expect(err).to.be.an.instanceof(BadRequest);
+      expect(err.message).to.equal(errorMessage('invalidQuantity'));
+      done();
+    }
   });
 });

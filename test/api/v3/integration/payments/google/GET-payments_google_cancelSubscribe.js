@@ -1,8 +1,8 @@
-import {generateUser} from '../../../../../helpers/api-integration/v3';
+import { generateUser } from '../../../../../helpers/api-integration/v3';
 import googlePayments from '../../../../../../website/server/libs/payments/google';
 
 describe('payments : google #cancelSubscribe', () => {
-  let endpoint = '/iap/android/subscribe/cancel?noRedirect=true';
+  const endpoint = '/iap/android/subscribe/cancel?noRedirect=true';
   let user;
 
   beforeEach(async () => {
@@ -13,7 +13,7 @@ describe('payments : google #cancelSubscribe', () => {
     let cancelStub;
 
     beforeEach(async () => {
-      cancelStub = sinon.stub(googlePayments, 'cancelSubscribe').returnsPromise().resolves({});
+      cancelStub = sinon.stub(googlePayments, 'cancelSubscribe').resolves({});
     });
 
     afterEach(() => {

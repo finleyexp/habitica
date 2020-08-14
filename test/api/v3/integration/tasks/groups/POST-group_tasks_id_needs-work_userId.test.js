@@ -1,18 +1,19 @@
+import { find } from 'lodash';
 import {
   createAndPopulateGroup,
   translate as t,
 } from '../../../../../helpers/api-integration/v3';
-import { find } from 'lodash';
 
 describe('POST /tasks/:id/needs-work/:userId', () => {
-  let user, guild, member, member2, task;
+  let user; let guild; let member; let member2; let
+    task;
 
   function findAssignedTask (memberTask) {
     return memberTask.group.id === guild._id;
   }
 
   beforeEach(async () => {
-    let {group, members, groupLeader} = await createAndPopulateGroup({
+    const { group, members, groupLeader } = await createAndPopulateGroup({
       groupDetails: {
         name: 'Test Guild',
         type: 'guild',
@@ -22,8 +23,8 @@ describe('POST /tasks/:id/needs-work/:userId', () => {
 
     guild = group;
     user = groupLeader;
-    member = members[0];
-    member2 = members[1];
+    member = members[0]; // eslint-disable-line prefer-destructuring
+    member2 = members[1]; // eslint-disable-line prefer-destructuring
 
     task = await user.post(`/tasks/group/${guild._id}`, {
       text: 'test todo',
@@ -51,7 +52,7 @@ describe('POST /tasks/:id/needs-work/:userId', () => {
       });
   });
 
-  it('marks as task as needing more work', async () => {
+  it('marks a task as needing more work', async () => {
     const initialNotifications = member.notifications.length;
 
     await user.post(`/tasks/${task._id}/assign/${member._id}`);
@@ -60,13 +61,7 @@ describe('POST /tasks/:id/needs-work/:userId', () => {
     let syncedTask = find(memberTasks, findAssignedTask);
 
     // score task to require approval
-    await expect(member.post(`/tasks/${syncedTask._id}/score/up`))
-      .to.eventually.be.rejected.and.to.eql({
-        code: 401,
-        error: 'NotAuthorized',
-        message: t('taskApprovalHasBeenRequested'),
-      });
-
+    await member.post(`/tasks/${syncedTask._id}/score/up`);
     await user.post(`/tasks/${task._id}/needs-work/${member._id}`);
 
     [memberTasks] = await Promise.all([member.get('/tasks/user'), member.sync()]);
@@ -77,14 +72,14 @@ describe('POST /tasks/:id/needs-work/:userId', () => {
     expect(syncedTask.group.approval.requestedDate).to.equal(undefined);
 
     // Check that the notification is correct
-    expect(member.notifications.length).to.equal(initialNotifications + 1);
+    expect(member.notifications.length).to.equal(initialNotifications + 2);
     const notification = member.notifications[member.notifications.length - 1];
     expect(notification.type).to.equal('GROUP_TASK_NEEDS_WORK');
 
     const taskText = syncedTask.text;
     const managerName = user.profile.name;
 
-    expect(notification.data.message).to.equal(t('taskNeedsWork', {taskText, managerName}));
+    expect(notification.data.message).to.equal(t('taskNeedsWork', { taskText, managerName }));
 
     expect(notification.data.task.id).to.equal(syncedTask._id);
     expect(notification.data.task.text).to.equal(taskText);
@@ -98,8 +93,8 @@ describe('POST /tasks/:id/needs-work/:userId', () => {
     // Check that the managers' GROUP_TASK_APPROVAL notifications have been removed
     await user.sync();
 
-    expect(user.notifications.find(n => {
-      n.data.taskId === syncedTask._id && n.type === 'GROUP_TASK_APPROVAL';
+    expect(user.notifications.find(n => { // eslint-disable-line arrow-body-style
+      return n.data.taskId === syncedTask._id && n.type === 'GROUP_TASK_APPROVAL';
     })).to.equal(undefined);
   });
 
@@ -113,12 +108,7 @@ describe('POST /tasks/:id/needs-work/:userId', () => {
     let syncedTask = find(memberTasks, findAssignedTask);
 
     // score task to require approval
-    await expect(member.post(`/tasks/${syncedTask._id}/score/up`))
-      .to.eventually.be.rejected.and.to.eql({
-        code: 401,
-        error: 'NotAuthorized',
-        message: t('taskApprovalHasBeenRequested'),
-      });
+    await member.post(`/tasks/${syncedTask._id}/score/up`);
 
     const initialNotifications = member.notifications.length;
 
@@ -131,14 +121,14 @@ describe('POST /tasks/:id/needs-work/:userId', () => {
     expect(syncedTask.group.approval.requested).to.equal(false);
     expect(syncedTask.group.approval.requestedDate).to.equal(undefined);
 
-    expect(member.notifications.length).to.equal(initialNotifications + 1);
+    expect(member.notifications.length).to.equal(initialNotifications + 2);
     const notification = member.notifications[member.notifications.length - 1];
     expect(notification.type).to.equal('GROUP_TASK_NEEDS_WORK');
 
     const taskText = syncedTask.text;
     const managerName = member2.profile.name;
 
-    expect(notification.data.message).to.equal(t('taskNeedsWork', {taskText, managerName}));
+    expect(notification.data.message).to.equal(t('taskNeedsWork', { taskText, managerName }));
 
     expect(notification.data.task.id).to.equal(syncedTask._id);
     expect(notification.data.task.text).to.equal(taskText);
@@ -152,12 +142,12 @@ describe('POST /tasks/:id/needs-work/:userId', () => {
     // Check that the managers' GROUP_TASK_APPROVAL notifications have been removed
     await Promise.all([user.sync(), member2.sync()]);
 
-    expect(user.notifications.find(n => {
-      n.data.taskId === syncedTask._id && n.type === 'GROUP_TASK_APPROVAL';
+    expect(user.notifications.find(n => { // eslint-disable-line arrow-body-style
+      return n.data.taskId === syncedTask._id && n.type === 'GROUP_TASK_APPROVAL';
     })).to.equal(undefined);
 
-    expect(member2.notifications.find(n => {
-      n.data.taskId === syncedTask._id && n.type === 'GROUP_TASK_APPROVAL';
+    expect(member2.notifications.find(n => { // eslint-disable-line arrow-body-style
+      return n.data.taskId === syncedTask._id && n.type === 'GROUP_TASK_APPROVAL';
     })).to.equal(undefined);
   });
 
@@ -167,6 +157,11 @@ describe('POST /tasks/:id/needs-work/:userId', () => {
     });
 
     await member2.post(`/tasks/${task._id}/assign/${member._id}`);
+
+    const memberTasks = await member.get('/tasks/user');
+    const syncedTask = find(memberTasks, findAssignedTask);
+
+    await member.post(`/tasks/${syncedTask._id}/score/up`);
     await member2.post(`/tasks/${task._id}/approve/${member._id}`);
     await expect(user.post(`/tasks/${task._id}/needs-work/${member._id}`))
       .to.eventually.be.rejected.and.to.eql({

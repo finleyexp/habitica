@@ -2,13 +2,12 @@
 // @authorName = 'TheHollidayInn'; // in case script author needs to know when their ...
 // @authorUuid = ''; // ... own data is done
 
-
 /*
  * This migration moves chat off of groups and into their own model
  */
 
 import { model as Group } from '../../website/server/models/group';
-import { model as Chat } from '../../website/server/models/chat';
+import { chatModel as Chat } from '../../website/server/models/message';
 
 async function moveGroupChatToModel (skip = 0) {
   const groups = await Group.find({})
@@ -38,9 +37,8 @@ async function moveGroupChatToModel (skip = 0) {
     return chatpromises;
   });
 
-
   const reducedPromises = promises.reduce((acc, curr) => {
-    acc = acc.concat(curr);
+    acc = acc.concat(curr); // eslint-disable-line no-param-reassign
     return acc;
   }, []);
 
@@ -49,4 +47,4 @@ async function moveGroupChatToModel (skip = 0) {
   moveGroupChatToModel(skip + 50);
 }
 
-module.exports = moveGroupChatToModel;
+export default moveGroupChatToModel;

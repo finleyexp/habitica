@@ -2,18 +2,19 @@ import stripeModule from 'stripe';
 
 import {
   generateGroup,
-} from '../../../../../helpers/api-unit.helper.js';
+} from '../../../../../helpers/api-unit.helper';
 import { model as User } from '../../../../../../website/server/models/user';
 import stripePayments from '../../../../../../website/server/libs/payments/stripe';
 import payments from '../../../../../../website/server/libs/payments/payments';
 import common from '../../../../../../website/common';
 
-const i18n = common.i18n;
+const { i18n } = common;
 
 describe('cancel subscription', () => {
   const subKey = 'basic_3mo';
   const stripe = stripeModule('test');
-  let user, groupId, group;
+  let user; let groupId; let
+    group;
 
   beforeEach(async () => {
     user = new User();
@@ -62,7 +63,7 @@ describe('cancel subscription', () => {
   });
 
   it('throws an error if user is not the group leader', async () => {
-    let nonLeader = new User();
+    const nonLeader = new User();
     nonLeader.guilds.push(groupId);
     await nonLeader.save();
 
@@ -78,18 +79,23 @@ describe('cancel subscription', () => {
   });
 
   describe('success', () => {
-    let stripeDeleteCustomerStub, paymentsCancelSubStub, stripeRetrieveStub, subscriptionId, currentPeriodEndTimeStamp;
+    let stripeDeleteCustomerStub; let paymentsCancelSubStub;
+    let stripeRetrieveStub; let subscriptionId; let
+      currentPeriodEndTimeStamp;
 
     beforeEach(() => {
       subscriptionId = 'subId';
-      stripeDeleteCustomerStub = sinon.stub(stripe.customers, 'del').returnsPromise().resolves({});
-      paymentsCancelSubStub = sinon.stub(payments, 'cancelSubscription').returnsPromise().resolves({});
+      stripeDeleteCustomerStub = sinon.stub(stripe.customers, 'del').resolves({});
+      paymentsCancelSubStub = sinon.stub(payments, 'cancelSubscription').resolves({});
 
       currentPeriodEndTimeStamp = (new Date()).getTime();
       stripeRetrieveStub = sinon.stub(stripe.customers, 'retrieve')
-        .returnsPromise().resolves({
+        .resolves({
           subscriptions: {
-            data: [{id: subscriptionId, current_period_end: currentPeriodEndTimeStamp}], // eslint-disable-line camelcase
+            data: [{
+              id: subscriptionId,
+              current_period_end: currentPeriodEndTimeStamp,
+            }], // eslint-disable-line camelcase
           },
         });
     });
